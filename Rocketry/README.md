@@ -1,2 +1,5 @@
 #Rocketry team
-All the documents related to Rocketry are to be uploaded here
+
+
+
+This folder contains all the documents related to the Model Rocket
