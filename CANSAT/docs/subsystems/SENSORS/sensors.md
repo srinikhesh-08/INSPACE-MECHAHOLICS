@@ -1,4 +1,4 @@
-## Subsystem Sensor Breakdown
+## Sensor Subsystem Breakdown
 
 | Subsystem | Primary Sensor | Function |
 |------------|----------------|----------|
