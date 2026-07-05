@@ -1,6 +1,3 @@
-These are the EPS slides from our PDR
-
-
 ## CANSAT COMPONENT SUMMARY
 | Category | Component | Function / Role | Operating Voltage |
 |----------|-----------|-----------------|-------------------|
