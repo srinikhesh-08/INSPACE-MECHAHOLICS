@@ -1,7 +1,7 @@
 These are the EPS slides from our PDR
 
 
-###CANSAT COMPONENT SUMMARY
+### CANSAT COMPONENT SUMMARY
 | Category | Component | Function / Role | Operating Voltage |
 |----------|-----------|-----------------|-------------------|
 | Flight Computer | STM32F405 | Main MCU – telemetry, sensor fusion, mission control | 5 V |
@@ -18,7 +18,7 @@ These are the EPS slides from our PDR
 | Power Control | External Toggle Switch | Accessible main power ON/OFF | - |
 | Power Indicator | Green LED+330Ω | Power ON visual indicator→PC13 | 3.3V |
 
-##EPS ARCHITECTURE
+## EPS ARCHITECTURE
 | Parameter | Specification |
 |-----------|---------------|
 | **Battery** | Samsung INR18650-30Q, 2S1P configuration, 7.4 V, 3000 mAh |
