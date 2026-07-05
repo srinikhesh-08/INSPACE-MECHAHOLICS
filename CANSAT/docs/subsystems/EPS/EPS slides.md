@@ -30,6 +30,7 @@ These are the EPS slides from our PDR
 | **Total Energy** | 22.2 Wh available • 5.64 Wh required (includes 30% design margin) |
 
 ## PAYLOAD BLOCK DIAGRAM
+'''
 Samsung INR18650-30Q
         |
         |
@@ -40,7 +41,7 @@ MP1584 Buck Converter: 7.4 V → 5 V ----TPS73733 LDO Regulator: 5 V → 3.3 V
         |__ STM32F405RGT6                              |__ BNO086
         |__ NEO-M9N GPS                                |__ MicroSD card
         |__ M5Stack CAM                                |__ SX1276 LoRa
-
+'''
 ## Battery Comparison
 
 | Parameter | Samsung INR18650-30Q | Panasonic NCR18650GA | Molicel INR21700-P45B |
