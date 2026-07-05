@@ -1,7 +1,7 @@
 These are the EPS slides from our PDR
 
 
-##CANSAT COMPONENT SUMMARY
+###CANSAT COMPONENT SUMMARY
 | Category | Component | Function / Role | Operating Voltage |
 |----------|-----------|-----------------|-------------------|
 | Flight Computer | STM32F405 | Main MCU – telemetry, sensor fusion, mission control | 5 V |
