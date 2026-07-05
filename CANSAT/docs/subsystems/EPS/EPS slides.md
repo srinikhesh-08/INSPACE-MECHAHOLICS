@@ -29,7 +29,7 @@ These are the EPS slides from our PDR
 | **Mission Runtime** | Minimum requirement: 2 hours • Estimated operational time: ~7 hours |
 | **Total Energy** | 22.2 Wh available • 5.64 Wh required (includes 30% design margin) |
 
-##PAYLOAD BLOCK DIAGRAM
+## PAYLOAD BLOCK DIAGRAM
 Samsung INR18650-30Q
         |
         |
