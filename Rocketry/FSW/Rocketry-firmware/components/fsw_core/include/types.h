@@ -1,0 +1,93 @@
+#pragma once
+#include <stdint.h>
+#include <stdbool.h>
+#include "config.h"
+
+/* ---- Flight states ---- */
+typedef enum {
+    ST_BOOT = 0,
+    ST_TEST_MODE,
+    ST_LAUNCH_PAD,
+    ST_ASCENT,
+    ST_PAYLOAD_SEP,
+    ST_DESCENT,
+    ST_IMPACT,
+    ST_COUNT                 /* number of states, must equal NUM_FLIGHT_STATES */
+} fsw_state_t;
+
+_Static_assert(ST_COUNT == NUM_FLIGHT_STATES, "state enum and config.h disagree");
+
+/* ---- Telecommand opcodes ---- */
+typedef enum {
+    CMD_NONE            = 0x00,
+    CMD_START_TELEMETRY = 0x01,
+    CMD_STOP_TELEMETRY  = 0x02,
+    CMD_CALIBRATE_BARO  = 0x03,
+    CMD_CALIBRATE_GYRO  = 0x04,
+    CMD_CALIBRATE_ACCEL = 0x05,
+    CMD_ENTER_TEST      = 0x06,
+    CMD_ENTER_LAUNCHPAD = 0x07,
+    CMD_SWITCH_CHANNEL  = 0x08,
+    CMD_TRIGGER_SEP     = 0x09,
+    CMD_LOCK_PAYLOAD    = 0x0A
+} cmd_opcode_t;
+
+/* ---- Fault flags (bit mask) ---- */
+enum {
+    FAULT_IMU    = 1u << 0,
+    FAULT_BARO   = 1u << 1,
+    FAULT_GNSS   = 1u << 2,
+    FAULT_SD     = 1u << 3,
+    FAULT_RADIO  = 1u << 4,
+    FAULT_LOWBAT = 1u << 5
+};
+
+/* ---- Sensor samples (filled by sensor tasks in later stages) ---- */
+typedef struct {
+    uint32_t t_ms;
+    float ax, ay, az;        /* m/s^2, body frame, gravity included */
+    float gx, gy, gz;        /* deg/s */
+    bool  valid;
+} imu_data_t;
+
+typedef struct {
+    uint32_t t_ms;
+    float pressure_pa;
+    float temp_c;
+    bool  valid;
+} baro_data_t;
+
+typedef struct {
+    uint32_t t_ms;
+    uint32_t utc_hhmmss;
+    float lat, lon, alt_msl;
+    uint8_t sats;
+    bool fix, valid;
+} gnss_data_t;
+
+/* ---- Telemetry packet: the exact bytes sent over LoRa (spec section 6.5.2) ---- */
+#pragma pack(push, 1)
+typedef struct {
+    uint16_t team_number;
+    uint32_t mission_time;      /* s since power-on */
+    uint16_t packet_count;
+    float    altitude;          /* m AGL */
+    float    pressure;          /* Pa */
+    float    temperature;       /* degC */
+    float    voltage;           /* V */
+    uint32_t gnss_time;         /* HHMMSS */
+    float    latitude;
+    float    longitude;
+    float    gnss_altitude;     /* m MSL */
+    uint8_t  gnss_sats;
+    float    accel_x;
+    float    accel_y;
+    float    accel_z;
+    float    gyro_spin_rate;    /* deg/s */
+    uint8_t  flight_state;      /* fsw_state_t as a byte */
+    uint8_t  checksum;          /* XOR of bytes 0..57 */
+} telemetry_packet_t;
+#pragma pack(pop)
+
+_Static_assert(sizeof(telemetry_packet_t) == 59, "telemetry packet must be 59 bytes");
+_Static_assert(offsetof(telemetry_packet_t, checksum) == 58, "checksum must be the last byte");
