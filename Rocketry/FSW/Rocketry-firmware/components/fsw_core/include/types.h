@@ -65,7 +65,7 @@ typedef struct {
     bool fix, valid;
 } gnss_data_t;
 
-/* ---- Telemetry packet: the exact bytes sent over LoRa (spec section 6.5.2) ---- */
+/* ---- Telemetry packet: the exact bytes sent over LoRa ---- */
 #pragma pack(push, 1)
 typedef struct {
     uint16_t team_number;

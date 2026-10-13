@@ -12,7 +12,7 @@
 #define LAUNCH_SUSTAIN_MS        200u
 #define LAUNCH_ALT_M             3.0f       /* and altitude above this */
 
-#define APOGEE_MIN_ALT_M         900.0f
+#define APOGEE_MIN_ALT_M         300.0f
 #define APOGEE_NEG_VEL_MPS       1.0f       /* descending faster than this */
 #define APOGEE_CONFIRM_MS        500u
 
@@ -35,3 +35,14 @@
 /* ---- Telemetry and logging ---- */
 #define TELEMETRY_RATE_HZ        1u
 #define HEALTH_RATE_HZ           1u
+
+/* ---- Simulated sensors (TestAndSim) ---- */
+#define USE_SIM_SENSORS          1          /* 1 = fake data, 0 = real drivers (later) */
+#define SIM_PERIOD_MS            20u        /* sim runs at 50 Hz */
+#define SIM_PAD_S                10.0f      /* time sitting on the pad */
+#define SIM_BOOST_S              2.0f       /* motor burn time */
+#define SIM_BOOST_ACCEL_MPS2     65.0f      /* net upward accel during burn, gives about 990 m apogee */
+#define SIM_DESCENT_MPS          4.0f       /* steady parachute descent rate (spec: 2 to 5 m/s) */
+#define SIM_SPIN_DPS             2.0f       /* small steady roll rate */
+#define SIM_P0_PA                101325.0f  /* sea-level pressure */
+#define SIM_PAD_ELEV_M           500.0f     /* fake GNSS altitude MSL of the pad */
