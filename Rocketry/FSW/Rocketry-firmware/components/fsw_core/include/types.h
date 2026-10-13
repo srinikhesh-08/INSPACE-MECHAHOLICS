@@ -64,7 +64,18 @@ typedef struct {
     uint8_t sats;
     bool fix, valid;
 } gnss_data_t;
-
+/* ---- Data layer output: what the FSM reads ---- */
+typedef struct {
+    uint32_t t_ms;
+    float alt_agl_m;          /* filtered altitude above the pad */
+    float vel_mps;            /* filtered vertical velocity, + = up */
+    float max_alt_m;          /* highest altitude since launch */
+    float accel_mag;          /* |a| in m/s^2 */
+    bool  launch_detected;    /* latched */
+    bool  apogee_detected;    /* latched */
+    bool  impact_detected;    /* latched */
+    bool  valid;              /* false until the pad reference is set */
+} abstract_state_t;
 /* ---- Telemetry packet: the exact bytes sent over LoRa ---- */
 #pragma pack(push, 1)
 typedef struct {

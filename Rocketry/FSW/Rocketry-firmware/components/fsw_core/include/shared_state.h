@@ -15,6 +15,9 @@ void shared_write_gnss(const gnss_data_t *g);
 void shared_read_baro(baro_data_t *out);
 void shared_read_imu(imu_data_t *out);
 void shared_read_gnss(gnss_data_t *out);
+
+void shared_write_abstract(const abstract_state_t *a);
+void shared_read_abstract(abstract_state_t *out);
 #ifdef __cplusplus
 }
 #endif

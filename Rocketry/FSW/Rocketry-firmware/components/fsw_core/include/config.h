@@ -46,3 +46,11 @@
 #define SIM_SPIN_DPS             2.0f       /* small steady roll rate */
 #define SIM_P0_PA                101325.0f  /* sea-level pressure */
 #define SIM_PAD_ELEV_M           500.0f     /* fake GNSS altitude MSL of the pad */
+
+/* ---- Data layer ---- */
+#define DL_RATE_HZ               20u        /* ASCENT rate; Stage 5 will change it per state */
+#define DL_CAL_SAMPLES           20u        /* pad pressure samples averaged for the zero reference */
+#define DL_ALPHA                 0.30f      /* alpha-beta filter: altitude gain */
+#define DL_BETA                  0.053f     /* velocity gain, about alpha^2 / (2 - alpha) */
+#define ISA_ALT_SCALE_M          44330.0f   /* standard atmosphere constants */
+#define ISA_EXPONENT             5.255f

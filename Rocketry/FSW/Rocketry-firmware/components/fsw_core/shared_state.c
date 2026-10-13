@@ -6,6 +6,7 @@ static SemaphoreHandle_t s_lock;
 static baro_data_t       s_baro;
 static imu_data_t        s_imu;
 static gnss_data_t       s_gnss;
+static abstract_state_t  s_abstract;
 void shared_init(void)
 {
     s_lock = xSemaphoreCreateMutex();   /* created once, at startup */
@@ -50,5 +51,19 @@ void shared_read_gnss(gnss_data_t *out)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
     *out = s_gnss;
+    xSemaphoreGive(s_lock);
+}
+
+void shared_write_abstract(const abstract_state_t *a)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_abstract = *a;
+    xSemaphoreGive(s_lock);
+}
+
+void shared_read_abstract(abstract_state_t *out)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    *out = s_abstract;
     xSemaphoreGive(s_lock);
 }
