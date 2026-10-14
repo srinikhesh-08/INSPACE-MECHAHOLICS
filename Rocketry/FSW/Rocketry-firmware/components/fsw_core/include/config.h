@@ -23,6 +23,8 @@
 #define SERVO_PULSE_MIN_US       500u    /* typical MG996R; calibrate per servo */
 #define SERVO_PULSE_MAX_US       2500u
 #define SERVO_MOVE_TIME_MS       1000u   /* time allowed for a 180 deg move */
+#define SERVO_PAYLOAD_GPIO       25         /* signal pin of the payload cabinet servo */
+#define SERVO_PARACHUTE_GPIO     26         /* signal pin of the parachute cabinet servo */
 
 #define IMPACT_ALT_M             10.0f
 #define IMPACT_ACCEL_MPS2        29.4f      /* about 3 g deceleration spike */
@@ -40,6 +42,7 @@
 #define USE_SIM_SENSORS          1          /* 1 = fake data, 0 = real drivers (later) */
 #define SIM_PERIOD_MS            20u        /* sim runs at 50 Hz */
 #define SIM_PAD_S                10.0f      /* time sitting on the pad */
+#define SIM_LAUNCH_ON_COMMAND    1   /* 1 = sim waits on the pad for sim_request_launch(); 0 = auto launch after SIM_PAD_S */
 #define SIM_BOOST_S              2.0f       /* motor burn time */
 #define SIM_BOOST_ACCEL_MPS2     65.0f      /* net upward accel during burn, gives about 990 m apogee */
 #define SIM_DESCENT_MPS          4.0f       /* steady parachute descent rate (spec: 2 to 5 m/s) */
@@ -60,3 +63,4 @@
 #define TEST_MODE_MIN_MS         2000u      /* minimum time in TEST_MODE */
 #define SEP_DWELL_MS             2000u      /* time in PAYLOAD_SEP before DESCENT (servo move time + margin) */
 #define USE_DEBUG_CONSOLE        1          /* keys typed in the serial monitor act as telecommands */
+

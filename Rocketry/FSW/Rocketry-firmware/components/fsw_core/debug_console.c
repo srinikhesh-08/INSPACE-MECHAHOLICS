@@ -4,7 +4,8 @@
 #include "esp_log.h"
 #include "fsw_core.h"
 #include "debug_console.h"
-
+#include "config.h"
+#include "sim_sensors.h"
 static const char *TAG = "console";
 
 static void console_task(void *arg)
@@ -22,6 +23,17 @@ static void console_task(void *arg)
         case 'p': fsw_post_command(CMD_TOGGLE_PAYLOAD);   break;
         case 'c': fsw_post_command(CMD_TOGGLE_PARACHUTE); break;
         case 's': fsw_post_command(CMD_TRIGGER_SEP);     break;
+    #if USE_SIM_SENSORS
+        case 'g':
+            if (fsw_get_state() == ST_LAUNCH_PAD) {
+                ESP_LOGW(TAG, "SIM LAUNCH commanded");
+                sim_request_launch();
+            } else {
+                ESP_LOGW(TAG, "'g' ignored: FSM is in %s, not LAUNCH_PAD",
+                         fsw_state_name(fsw_get_state()));
+            }
+            break;
+    #endif
         default:  break;
         }
     }

@@ -10,7 +10,7 @@ void act_payload_lock(void);
 void act_payload_unlock(void);
 void act_parachute_lock(void);
 void act_parachute_unlock(void);
-
+void act_init(void);    /* call once at startup: sets up PWM and drives both servos to LOCKED */
 #ifdef __cplusplus
 }
 #endif

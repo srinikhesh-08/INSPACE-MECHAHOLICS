@@ -9,7 +9,9 @@
 #define G 9.81f
 
 static const char *TAG = "sim";
+static volatile bool s_launch_cmd = false;      /* set by the console task, consumed by sim_task */
 
+void sim_request_launch(void) { s_launch_cmd = true; }
 typedef enum { PH_PAD, PH_BOOST, PH_COAST, PH_DESCENT, PH_LANDED } sim_phase_t;
 
 /* Tiny deterministic noise generator (xorshift32): same noise on every run. */
@@ -66,7 +68,11 @@ static void sim_task(void *arg)
 
         /* phase transitions */
         sim_phase_t next = ph;
-        if (ph == PH_PAD && t_phase >= SIM_PAD_S)        next = PH_BOOST;
+        #if SIM_LAUNCH_ON_COMMAND
+                if (ph == PH_PAD && s_launch_cmd) { s_launch_cmd = false; next = PH_BOOST; }
+        #else
+                if (ph == PH_PAD && t_phase >= SIM_PAD_S) next = PH_BOOST;
+        #endif
         if (ph == PH_BOOST && t_phase >= SIM_BOOST_S)    next = PH_COAST;
         if (ph == PH_COAST && vel <= 0.0f)               next = PH_DESCENT;
         if (ph == PH_DESCENT && alt <= 0.0f) {

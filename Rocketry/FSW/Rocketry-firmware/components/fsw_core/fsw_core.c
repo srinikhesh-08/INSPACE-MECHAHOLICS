@@ -184,6 +184,7 @@ static void fsm_task(void *arg)
 
 void fsw_core_start(void)
 {
+    act_init();
     s_cmd_q = xQueueCreate(8, sizeof(uint8_t));
     xTaskCreate(fsm_task, "fsm", 4096, NULL, 7, NULL);
 }

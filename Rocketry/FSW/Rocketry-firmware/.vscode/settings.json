@@ -25,6 +25,12 @@
   "idf.port": "detect",
   "idf.currentSetup": "/home/rudy/.espressif/v6.1/esp-idf",
   "idf.customExtraVars": {
-    "IDF_TARGET": "esp32s3"
-  }
+    "IDF_TARGET": "esp32"
+  },
+  "clangd.path": "/home/rudy/.espressif/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin/clangd",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=/home/rudy/INSPACE-MECHAHOLICS/Rocketry/FSW/Rocketry-firmware/build"
+  ]
 }
