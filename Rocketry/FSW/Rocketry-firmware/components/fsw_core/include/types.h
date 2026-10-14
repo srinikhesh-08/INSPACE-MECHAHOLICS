@@ -29,7 +29,8 @@ typedef enum {
     CMD_ENTER_LAUNCHPAD = 0x07,
     CMD_SWITCH_CHANNEL  = 0x08,
     CMD_TRIGGER_SEP     = 0x09,
-    CMD_LOCK_PAYLOAD    = 0x0A
+    CMD_TOGGLE_PAYLOAD    = 0x0A,
+    CMD_TOGGLE_PARACHUTE  = 0x0B
 } cmd_opcode_t;
 
 /* ---- Fault flags (bit mask) ---- */

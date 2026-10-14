@@ -5,6 +5,7 @@
 #include "config.h"
 #include "shared_state.h"
 #include "data_layer.h"
+#include "rate_control.h"
 
 static const char *TAG = "data";
 
@@ -12,6 +13,8 @@ static void data_layer_task(void *arg)
 {
     dl_ctx_t ctx;
     dl_init(&ctx);
+    rate_register(RT_DATA);
+    uint32_t period_ms = 1000u / DL_RATE_HZ;
     bool was_valid = false, was_launch = false, was_apogee = false, was_impact = false;
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -48,8 +51,8 @@ static void data_layer_task(void *arg)
             was_apogee = out.apogee_detected;
             was_impact = out.impact_detected;
         }
-
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(1000u / DL_RATE_HZ));
+        period_ms = rate_poll(period_ms);
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(period_ms));
     }
 }
 

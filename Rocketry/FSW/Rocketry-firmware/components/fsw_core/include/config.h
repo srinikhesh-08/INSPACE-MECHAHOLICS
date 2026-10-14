@@ -12,7 +12,7 @@
 #define LAUNCH_SUSTAIN_MS        200u
 #define LAUNCH_ALT_M             3.0f       /* and altitude above this */
 
-#define APOGEE_MIN_ALT_M         300.0f
+#define APOGEE_MIN_ALT_M         200.0f
 #define APOGEE_NEG_VEL_MPS       1.0f       /* descending faster than this */
 #define APOGEE_CONFIRM_MS        500u
 
@@ -54,3 +54,9 @@
 #define DL_BETA                  0.053f     /* velocity gain, about alpha^2 / (2 - alpha) */
 #define ISA_ALT_SCALE_M          44330.0f   /* standard atmosphere constants */
 #define ISA_EXPONENT             5.255f
+
+/* ---- FSM ---- */
+#define FSM_PERIOD_MS            100u       /* TaskFSM: 10 Hz in every state */
+#define TEST_MODE_MIN_MS         2000u      /* minimum time in TEST_MODE */
+#define SEP_DWELL_MS             2000u      /* time in PAYLOAD_SEP before DESCENT (servo move time + margin) */
+#define USE_DEBUG_CONSOLE        1          /* keys typed in the serial monitor act as telecommands */
