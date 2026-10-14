@@ -70,12 +70,10 @@ static void enter_state(fsw_state_t next)
     /* Stage 6: save `next` to the SD card here */
 
     switch (next) {
-    case ST_LAUNCH_PAD:
-        act_parachute_lock();                    /* ASSUMPTION: see the questions below */
-        break;
     case ST_ASCENT:
-        if (!s_payload_locked) {
-            ESP_LOGW(TAG, "launch with the payload cabinet UNLOCKED");
+        if (!s_payload_locked || !s_parachute_locked) {
+            ESP_LOGW(TAG, "launch with a cabinet UNLOCKED (payload=%d parachute=%d)",
+                     s_payload_locked, s_parachute_locked);
         }
         break;
     case ST_PAYLOAD_SEP:                         /* release both, in the same tick as the transition */

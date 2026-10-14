@@ -13,11 +13,13 @@ static void monitor_task(void *arg)
     abstract_state_t a;
     while (true) {
         shared_read_abstract(&a);
-                printf("t=%6lu ms | %-11s | alt=%7.1f m vel=%6.1f m/s | payload_locked=%d chute_locked=%d | L=%d A=%d I=%d\n",
-               (unsigned long)a.t_ms, fsw_state_name(fsw_get_state()),
-               a.alt_agl_m, a.vel_mps, fsw_payload_locked(), fsw_parachute_locked(),
-               a.launch_detected, a.apogee_detected, a.impact_detected);
-    }
+            printf("t=%6lu ms | %-11s | alt=%7.1f m vel=%6.1f m/s | payload_locked=%d chute_locked=%d | L=%d A=%d I=%d\n",
+            (unsigned long)a.t_ms, fsw_state_name(fsw_get_state()),
+            a.alt_agl_m, a.vel_mps, fsw_payload_locked(), fsw_parachute_locked(),
+            a.launch_detected, a.apogee_detected, a.impact_detected);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+
 }
 
 extern "C" void app_main(void)
