@@ -26,12 +26,6 @@ static void monitor_task(void *arg)
 extern "C" void app_main(void)
 {
     shared_init();
-
-    if (sd_logger_mount() == ESP_OK &&
-        sd_logger_open(false, "test_column\n") == ESP_OK) {
-        sd_logger_write_line("hello from the rocket\n");
-        sd_logger_sync();
-    }
     fsw_core_start();
 #if USE_SIM_SENSORS
     sim_sensors_start();

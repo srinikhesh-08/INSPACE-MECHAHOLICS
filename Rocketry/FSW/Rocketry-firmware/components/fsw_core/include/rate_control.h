@@ -10,6 +10,7 @@ typedef enum {
     RT_BARO,
     RT_GNSS,
     RT_DATA,
+    RT_LOG,
     RT_COUNT
 } rate_task_t;
 

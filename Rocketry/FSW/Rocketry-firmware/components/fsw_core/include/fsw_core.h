@@ -8,7 +8,8 @@ extern "C" {
 
 /* Creates the command queue and the FSM task (10 Hz). */
 void fsw_core_start(void);
-
+/* Starts the SD logger task (call after shared_init). */
+void logger_start(void);
 /* Telecommand entry point: the comm layer (and the debug console) call this from any task. */
 bool fsw_post_command(cmd_opcode_t op);
 

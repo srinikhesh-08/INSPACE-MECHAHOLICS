@@ -16,14 +16,14 @@ static const char *const STATE_NAME[ST_COUNT] = {
 
 /* Task rates in Hz per state (spec table). Column order must match rate_task_t. */
 static const uint16_t RATE_HZ[ST_COUNT][RT_COUNT] = {
-    /*                 IMU  BARO GNSS DATA */
-    /* BOOT        */ {  10,   5,   1,   5 },
-    /* TEST_MODE   */ {  10,   5,   1,   5 },
-    /* LAUNCH_PAD  */ {  10,   5,   5,   5 },
-    /* ASCENT      */ { 100,  20,   5,  20 },
-    /* PAYLOAD_SEP */ {  50,  10,   5,  10 },
-    /* DESCENT     */ { 100,  20,   5,  20 },
-    /* IMPACT      */ {  10,   2,   1,   2 },
+    /*                 IMU  BARO GNSS DATA  LOG */
+    /* BOOT        */ {  10,   5,   1,   5,   1 },
+    /* TEST_MODE   */ {  10,   5,   1,   5,   1 },
+    /* LAUNCH_PAD  */ {  10,   5,   5,   5,  1 },
+    /* ASCENT      */ { 100,  20,   5,  20,  1 },
+    /* PAYLOAD_SEP */ {  50,  10,   5,  10,  1 },
+    /* DESCENT     */ { 100,  20,   5,  20,  1 },
+    /* IMPACT      */ {  10,   2,   1,   2,   1 },
 };
 
 static volatile fsw_state_t s_state = ST_BOOT;
@@ -57,8 +57,9 @@ static void apply_rates(fsw_state_t s)
     for (int t = 0; t < RT_COUNT; t++) {
         rate_set((rate_task_t)t, 1000u / RATE_HZ[s][t]);
     }
-    ESP_LOGI(TAG, "rates: IMU=%u BARO=%u GNSS=%u DATA=%u Hz",
-             RATE_HZ[s][RT_IMU], RATE_HZ[s][RT_BARO], RATE_HZ[s][RT_GNSS], RATE_HZ[s][RT_DATA]);
+    ESP_LOGI(TAG, "rates: IMU=%u BARO=%u GNSS=%u DATA=%u LOG=%u Hz",
+             RATE_HZ[s][RT_IMU], RATE_HZ[s][RT_BARO], RATE_HZ[s][RT_GNSS],
+             RATE_HZ[s][RT_DATA], RATE_HZ[s][RT_LOG]);
 }
 
 static void enter_state(fsw_state_t next)
@@ -183,4 +184,5 @@ void fsw_core_start(void)
     act_init();
     s_cmd_q = xQueueCreate(8, sizeof(uint8_t));
     xTaskCreate(fsm_task, "fsm", 4096, NULL, 7, NULL);
+    logger_start();
 }
