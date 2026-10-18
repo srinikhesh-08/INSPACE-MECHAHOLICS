@@ -4,13 +4,15 @@
 extern "C" {
 #endif
 
-/* Servo positions: 180 deg = locked, 0 deg = unlocked/open.
-   These must return immediately (set the target and go): the real PWM comes in a later stage. */
+/* Continuous-rotation servos have no position feedback, so the FSM tracks locked/unlocked.
+   Unlocked = 0 deg, locked = 180 deg. Lock = forward timed move, unlock = reverse timed move.
+   All calls return immediately; the move runs in the servo's own task. */
+void act_init(void);                 /* sets up PWM and tasks. Moves nothing. */
 void act_payload_lock(void);
 void act_payload_unlock(void);
 void act_parachute_lock(void);
 void act_parachute_unlock(void);
-void act_init(void);    /* call once at startup: sets up PWM and drives both servos to LOCKED */
+
 #ifdef __cplusplus
 }
 #endif

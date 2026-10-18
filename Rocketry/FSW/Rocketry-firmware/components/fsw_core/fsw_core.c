@@ -28,8 +28,8 @@ static const uint16_t RATE_HZ[ST_COUNT][RT_COUNT] = {
 
 static volatile fsw_state_t s_state = ST_BOOT;
 static uint32_t             s_enter_ms;
-static volatile bool s_payload_locked   = true;    /* cabinets are locked at power-on */
-static volatile bool s_parachute_locked = true;
+static volatile bool s_payload_locked   = false;   /* both cabinets UNLOCKED at power-on */
+static volatile bool s_parachute_locked = false;
 static QueueHandle_t        s_cmd_q;
 
 static uint32_t now_ms(void)
@@ -76,11 +76,9 @@ static void enter_state(fsw_state_t next)
                      s_payload_locked, s_parachute_locked);
         }
         break;
-    case ST_PAYLOAD_SEP:                         /* release both, in the same tick as the transition */
-        act_payload_unlock();
-        act_parachute_unlock();
-        s_payload_locked = false;
-        s_parachute_locked = false;
+    case ST_PAYLOAD_SEP:   /* a continuous servo has no end stop: a second unlock would over-rotate */
+        if (s_payload_locked)   { act_payload_unlock();   s_payload_locked = false; }
+        if (s_parachute_locked) { act_parachute_unlock(); s_parachute_locked = false; }
         break;
     default:
         break;
@@ -165,8 +163,6 @@ static void fsm_task(void *arg)
     s_enter_ms = now_ms();
     ESP_LOGI(TAG, "starting in %s", fsw_state_name(s_state));
     apply_rates(s_state);
-    act_payload_lock();                         
-    act_parachute_lock();
     TickType_t last_wake = xTaskGetTickCount();
     while (true) {
         uint8_t op;

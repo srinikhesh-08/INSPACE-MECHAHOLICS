@@ -1,0 +1,2 @@
+source /home/vboxuser/INSPACE/INSPACE-MECHAHOLICS/Rocketry/FSW/Rocketry-firmware/build/bootloader/gdbinit/symbols
+source /home/vboxuser/INSPACE/INSPACE-MECHAHOLICS/Rocketry/FSW/Rocketry-firmware/build/bootloader/gdbinit/connect
