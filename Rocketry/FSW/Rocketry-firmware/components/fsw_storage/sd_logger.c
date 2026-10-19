@@ -82,9 +82,8 @@ esp_err_t sd_logger_open(bool resume, const char *header)
         ESP_LOGE(TAG, "cannot open %s", path);
         return ESP_FAIL;
     }
-
-    if (append)      fputs("# --- RESUMED AFTER RESET ---\n", s_file);
-    else if (header) fputs(header, s_file);
+    
+    if (!append && header) fputs(header, s_file);
     fflush(s_file);
     fsync(fileno(s_file));
 

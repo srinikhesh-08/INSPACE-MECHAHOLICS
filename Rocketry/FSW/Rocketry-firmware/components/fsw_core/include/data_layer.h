@@ -31,7 +31,9 @@ void dl_init(dl_ctx_t *c);
 
 /* Ask for a new pad reference. Ignored once launch is detected. */
 void dl_recalibrate(dl_ctx_t *c);
-
+/* After a mid-flight reset: skip calibration and rebuild the latches. */
+void dl_restore(dl_ctx_t *c, float p_ref, float max_alt,
+                bool launched, bool apogee, bool impact);
 /* One processing step. Pure logic: no FreeRTOS, easy to test on a PC. */
 void dl_step(dl_ctx_t *c, uint32_t t_ms, float pressure_pa, float accel_mag,
              abstract_state_t *out);

@@ -24,6 +24,7 @@ static void publish(const dl_ctx_t *c, uint32_t t_ms, float accel_mag,
     o->alt_agl_m       = c->alt;
     o->vel_mps         = c->vel;
     o->max_alt_m       = c->max_alt;
+    o->p_ref_pa        = c->p_ref;
     o->accel_mag       = accel_mag;
     o->launch_detected = c->launched;
     o->apogee_detected = c->apogee;
@@ -44,6 +45,20 @@ void dl_recalibrate(dl_ctx_t *c)
     c->calibrated = false;
     c->cal_sum    = 0.0f;
     c->cal_count  = 0;
+}
+
+void dl_restore(dl_ctx_t *c, float p_ref, float max_alt,
+                bool launched, bool apogee, bool impact)
+{
+    c->calibrated = true;          /* use the saved pad pressure, do not re-average */
+    c->p_ref      = p_ref;
+    c->have_last  = false;         /* filter restarts from the first new sample */
+    c->alt = 0.0f;
+    c->vel = 0.0f;
+    c->max_alt  = max_alt;
+    c->launched = launched;
+    c->apogee   = apogee;
+    c->impact   = impact;
 }
 
 void dl_step(dl_ctx_t *c, uint32_t t_ms, float pressure_pa, float accel_mag,

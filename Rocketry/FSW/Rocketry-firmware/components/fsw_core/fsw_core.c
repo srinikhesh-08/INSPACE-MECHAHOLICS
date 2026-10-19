@@ -7,6 +7,7 @@
 #include "rate_control.h"
 #include "actuators.h"
 #include "fsw_core.h"
+#include "persist.h"
 
 static const char *TAG = "fsm";
 
@@ -31,6 +32,9 @@ static uint32_t             s_enter_ms;
 static volatile bool s_payload_locked   = false;   /* both cabinets UNLOCKED at power-on */
 static volatile bool s_parachute_locked = false;
 static QueueHandle_t        s_cmd_q;
+static bool  s_restored = false;
+static float s_rest_p_ref = 0.0f;
+static float s_rest_max_alt = 0.0f;
 
 static uint32_t now_ms(void)
 {
@@ -62,13 +66,25 @@ static void apply_rates(fsw_state_t s)
              RATE_HZ[s][RT_DATA], RATE_HZ[s][RT_LOG]);
 }
 
+static void save_record(void)
+{
+    abstract_state_t a;
+    shared_read_abstract(&a);
+    persist_record_t r = {};
+    r.state            = (uint8_t)s_state;
+    r.payload_locked   = s_payload_locked;
+    r.parachute_locked = s_parachute_locked;
+    r.p_ref_pa         = a.p_ref_pa;
+    r.max_alt_m        = a.max_alt_m;
+    persist_save(&r);
+}
+
 static void enter_state(fsw_state_t next)
 {
     ESP_LOGI(TAG, "STATE %s -> %s", fsw_state_name(s_state), fsw_state_name(next));
     s_state    = next;
     s_enter_ms = now_ms();
     apply_rates(next);
-    /* Stage 6: save `next` to the SD card here */
 
     switch (next) {
     case ST_ASCENT:
@@ -81,9 +97,13 @@ static void enter_state(fsw_state_t next)
         if (s_payload_locked)   { act_payload_unlock();   s_payload_locked = false; }
         if (s_parachute_locked) { act_parachute_unlock(); s_parachute_locked = false; }
         break;
+    case ST_LAUNCH_PAD:
+        if (!persist_ready()) persist_repair();   /* safe: we reached the pad by a normal boot */
+        break;
     default:
         break;
     }
+    save_record();
 }
 
 static void handle_command(uint8_t op)
@@ -182,7 +202,28 @@ static void fsm_task(void *arg)
 void fsw_core_start(void)
 {
     act_init();
+    persist_init();
+
+    persist_record_t r;
+    if (persist_load(&r) &&
+        (r.state == ST_ASCENT || r.state == ST_PAYLOAD_SEP || r.state == ST_DESCENT)) {
+        s_state             = (fsw_state_t)r.state;
+        s_payload_locked    = r.payload_locked;
+        s_parachute_locked  = r.parachute_locked;
+        s_rest_p_ref        = r.p_ref_pa;
+        s_rest_max_alt      = r.max_alt_m;
+        s_restored          = true;
+        ESP_LOGW(TAG, "RESET RECOVERY: resuming in %s", fsw_state_name(s_state));
+    }
+
     s_cmd_q = xQueueCreate(8, sizeof(uint8_t));
     xTaskCreate(fsm_task, "fsm", 4096, NULL, 7, NULL);
     logger_start();
+}
+
+bool fsw_restored_info(float *p_ref, float *max_alt)
+{
+    if (p_ref)   *p_ref   = s_rest_p_ref;
+    if (max_alt) *max_alt = s_rest_max_alt;
+    return s_restored;
 }

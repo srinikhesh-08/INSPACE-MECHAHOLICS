@@ -71,6 +71,7 @@ typedef struct {
     float alt_agl_m;          /* filtered altitude above the pad */
     float vel_mps;            /* filtered vertical velocity, + = up */
     float max_alt_m;          /* highest altitude since launch */
+    float p_ref_pa;           /* pad pressure reference, 0 until calibrated */
     float accel_mag;          /* |a| in m/s^2 */
     bool  launch_detected;    /* latched */
     bool  apogee_detected;    /* latched */

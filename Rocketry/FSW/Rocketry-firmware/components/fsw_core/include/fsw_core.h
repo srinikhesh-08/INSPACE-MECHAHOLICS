@@ -17,7 +17,8 @@ fsw_state_t fsw_get_state(void);
 const char *fsw_state_name(fsw_state_t s);
 bool        fsw_payload_locked(void);
 bool        fsw_parachute_locked(void);
-
+/* true if the FSM resumed from a saved state after a reset */
+bool fsw_restored_info(float *p_ref, float *max_alt);   /* pointers may be NULL */
 #ifdef __cplusplus
 }
 #endif

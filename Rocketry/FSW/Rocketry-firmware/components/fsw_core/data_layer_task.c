@@ -6,6 +6,7 @@
 #include "shared_state.h"
 #include "data_layer.h"
 #include "rate_control.h"
+#include "fsw_core.h"
 
 static const char *TAG = "data";
 
@@ -13,6 +14,13 @@ static void data_layer_task(void *arg)
 {
     dl_ctx_t ctx;
     dl_init(&ctx);
+    float r_pref, r_max;
+    if (fsw_restored_info(&r_pref, &r_max)) {
+        fsw_state_t s = fsw_get_state();
+        dl_restore(&ctx, r_pref, r_max,
+                   s >= ST_ASCENT, s >= ST_PAYLOAD_SEP, false);
+        ESP_LOGW(TAG, "restored: p_ref=%.1f Pa, max_alt=%.1f m", r_pref, r_max);
+    }
     rate_register(RT_DATA);
     uint32_t period_ms = 1000u / DL_RATE_HZ;
     bool was_valid = false, was_launch = false, was_apogee = false, was_impact = false;

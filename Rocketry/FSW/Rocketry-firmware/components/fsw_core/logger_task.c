@@ -68,11 +68,17 @@ static int packet_to_csv(const telemetry_packet_t *p, char *buf, size_t n)
         (unsigned)p->gnss_sats, p->accel_x, p->accel_y, p->accel_z,
         p->gyro_spin_rate, fsw_state_name((fsw_state_t)p->flight_state));
 }
+
+static bool s_opened_before = false;
+
 static void try_start_card(void)
 {
     if (sd_logger_mount() == ESP_OK) {
-        if (sd_logger_open(false, CSV_HEADER) != ESP_OK) {
-            sd_logger_close();      /* unmount so the next retry starts clean */
+        bool resume = fsw_restored_info(NULL, NULL) || s_opened_before;
+        if (sd_logger_open(resume, CSV_HEADER) == ESP_OK) {
+            s_opened_before = true;
+        } else {
+            sd_logger_close();
         }
     }
 }
