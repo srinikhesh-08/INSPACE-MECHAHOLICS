@@ -16,18 +16,15 @@
 #define APOGEE_NEG_VEL_MPS       1.0f       /* descending faster than this */
 #define APOGEE_CONFIRM_MS        500u
 
-/* ---- Cabinet servos (continuous rotation, timed moves) ---- */
-#define PAYLOAD_SERVO_GPIO       18
-#define PARACHUTE_SERVO_GPIO     4          /* set to the pin you actually wired */
-
-#define SERVO_LOCK_SPEED_PCT     150.0f     /* forward: 0 -> 180 deg (your tested value) */
-#define SERVO_UNLOCK_SPEED_PCT   (-150.0f)  /* reverse: 180 -> 0 deg */
-
-/* How long each move runs. Calibrate on the bench until one move = 180 deg. */
-#define PAYLOAD_LOCK_MS          1000u
-#define PAYLOAD_UNLOCK_MS        1000u
-#define PARACHUTE_LOCK_MS        1000u
-#define PARACHUTE_UNLOCK_MS      1000u
+/* ---- Payload lock servo (MG996R, separate supply) ---- */
+#define SERVO_UNLOCKED_DEG       0.0f
+#define SERVO_LOCKED_DEG         180.0f
+#define SERVO_PWM_FREQ_HZ        50u
+#define SERVO_PULSE_MIN_US       500u    /* typical MG996R; calibrate per servo */
+#define SERVO_PULSE_MAX_US       2500u
+#define SERVO_MOVE_TIME_MS       1000u   /* time allowed for a 180 deg move */
+#define SERVO_PAYLOAD_GPIO       25         /* signal pin of the payload cabinet servo */
+#define SERVO_PARACHUTE_GPIO     26         /* signal pin of the parachute cabinet servo */
 
 #define IMPACT_ALT_M             10.0f
 #define IMPACT_ACCEL_MPS2        29.4f      /* about 3 g deceleration spike */
