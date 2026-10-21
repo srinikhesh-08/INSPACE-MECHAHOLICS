@@ -10,6 +10,12 @@
 #include "sd_logger.h"
 #include <math.h>
 #include <string.h>
+#include <string.h>
+#include "freertos/queue.h"
+
+#define LOG_QUEUE_LEN   20      /* lines kept while the card is busy or missing */
+
+static QueueHandle_t s_line_q = NULL;
 
 #define LOG_SYNC_MS  1u    /* force data onto the card once per second */
 #define LOG_RETRY_MS   2000u    /* retry the card this often if it is missing */
@@ -18,56 +24,6 @@ static const char CSV_HEADER[] =
     "TEAM_ID,TIME_S,PACKET_COUNT,ALTITUDE_M,PRESSURE_PA,TEMP_C,VOLTAGE_V,"
     "GNSS_TIME,GNSS_LAT,GNSS_LON,GNSS_ALT_M,GNSS_SATS,"
     "ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_SPIN_DPS,FLIGHT_STATE\n";
-
-static float round_to(float v, float step)
-{
-    return roundf(v / step) * step;
-}
-
-static uint16_t s_packet_count = 0;
-
-static void fill_packet(telemetry_packet_t *p)
-{
-    baro_data_t      b;
-    imu_data_t       i;
-    gnss_data_t      g;
-    abstract_state_t a;
-    shared_read_baro(&b);
-    shared_read_imu(&i);
-    shared_read_gnss(&g);
-    shared_read_abstract(&a);
-
-    memset(p, 0, sizeof(*p));
-    p->team_number    = TEAM_NUMBER;
-    p->mission_time   = (xTaskGetTickCount() * portTICK_PERIOD_MS) / 1000u;
-    p->packet_count   = ++s_packet_count;
-    p->altitude       = round_to(a.alt_agl_m, 0.1f);
-    p->pressure       = round_to(b.pressure_pa, 1.0f);
-    p->temperature    = round_to(b.temp_c, 0.1f);
-    p->voltage        = 0.0f;                       /* Stage 8: battery ADC */
-    p->gnss_time      = g.utc_hhmmss;
-    p->latitude       = round_to(g.lat, 0.0001f);
-    p->longitude      = round_to(g.lon, 0.0001f);
-    p->gnss_altitude  = round_to(g.alt_msl, 0.1f);
-    p->gnss_sats      = g.sats;
-    p->accel_x        = i.ax;
-    p->accel_y        = i.ay;
-    p->accel_z        = i.az;
-    p->gyro_spin_rate = i.gz;                       /* assumed roll axis */
-    p->flight_state   = (uint8_t)fsw_get_state();
-}
-static int packet_to_csv(const telemetry_packet_t *p, char *buf, size_t n)
-{
-    return snprintf(buf, n,
-        "2026 IN-SPACe-%03u,%lu,%u,%.1f,%.0f,%.1f,%.2f,"
-        "%lu,%.4f,%.4f,%.1f,%u,%.2f,%.2f,%.2f,%.2f,%s\n",
-        (unsigned)p->team_number, (unsigned long)p->mission_time,
-        (unsigned)p->packet_count,
-        p->altitude, p->pressure, p->temperature, p->voltage,
-        (unsigned long)p->gnss_time, p->latitude, p->longitude, p->gnss_altitude,
-        (unsigned)p->gnss_sats, p->accel_x, p->accel_y, p->accel_z,
-        p->gyro_spin_rate, fsw_state_name((fsw_state_t)p->flight_state));
-}
 
 static bool s_opened_before = false;
 
@@ -83,45 +39,45 @@ static void try_start_card(void)
     }
 }
 
+bool logger_post_line(const char *line)
+{
+    if (s_line_q == NULL) return false;
+    char item[TLM_LINE_MAX];
+    snprintf(item, sizeof(item), "%s", line);
+    return xQueueSend(s_line_q, item, 0) == pdTRUE;    /* never blocks; a full queue drops the newest */
+}
+
 static void logger_task(void *arg)
 {
-    rate_register(RT_LOG);
-    uint32_t period_ms = 1000u / TELEMETRY_RATE_HZ;
-    char row[256];
+    char line[TLM_LINE_MAX];
+    uint32_t last_try_ms = 0;
 
     try_start_card();
-    uint32_t last_try_ms  = xTaskGetTickCount() * portTICK_PERIOD_MS;
-    uint32_t last_sync_ms = last_try_ms;
-    TickType_t last_wake  = xTaskGetTickCount();
 
     while (true) {
-        uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
-
-        telemetry_packet_t pkt;
-        fill_packet(&pkt);
-
         if (!sd_logger_ok()) {
+            /* no card: lines wait in the queue, retry the mount now and then */
+            uint32_t now_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
             if (now_ms - last_try_ms >= LOG_RETRY_MS) {
                 last_try_ms = now_ms;
                 try_start_card();
             }
-        } else {
-            int len = packet_to_csv(&pkt, row, sizeof(row));
-            if (len > 0 && len < (int)sizeof(row)) {
-                sd_logger_write_line(row);
-            }
-            if (now_ms - last_sync_ms >= LOG_SYNC_MS) {
-                last_sync_ms = now_ms;
-                sd_logger_sync();
-            }
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
         }
 
-        period_ms = rate_poll(period_ms);
-        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(period_ms));
+        if (xQueuePeek(s_line_q, line, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            if (sd_logger_write_line(line)) {
+                xQueueReceive(s_line_q, line, 0);      /* written: now remove it */
+                sd_logger_sync();                      /* one line per second, so sync every time */
+            }
+            /* on a write error the card was closed and the line stays queued for the retry */
+        }
     }
 }
 
 void logger_start(void)
 {
+    s_line_q = xQueueCreate(LOG_QUEUE_LEN, TLM_LINE_MAX);
     xTaskCreate(logger_task, "logger", 6144, NULL, 3, NULL);
 }

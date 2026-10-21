@@ -10,6 +10,12 @@ extern "C" {
 void fsw_core_start(void);
 /* Starts the SD logger task (call after shared_init). */
 void logger_start(void);
+void telemetry_start(void);
+void telemetry_set_tx(bool on);
+void telemetry_toggle_channel(void);
+bool telemetry_tx_enabled(void);
+bool telemetry_on_backup(void);
+bool logger_post_line(const char *line);
 /* Telecommand entry point: the comm layer (and the debug console) call this from any task. */
 bool fsw_post_command(cmd_opcode_t op);
 

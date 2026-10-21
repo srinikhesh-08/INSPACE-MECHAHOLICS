@@ -64,3 +64,15 @@
 #define SEP_DWELL_MS             2000u      /* time in PAYLOAD_SEP before DESCENT (servo move time + margin) */
 #define USE_DEBUG_CONSOLE        1          /* keys typed in the serial monitor act as telecommands */
 
+/* ---- Telemetry line ---- */
+#define TEAM_ID_TEXT   "2026-IN-SPACe-007"
+#define TLM_LINE_MAX   160                   /* longest telemetry line, newline included */
+
+/* ---- LoRa, team 007 (frequency assignment document) ---- */
+#define LORA_MAIN_HZ         865500000u
+#define LORA_BACKUP_HZ       867250000u
+#define LORA_SF              7
+#define LORA_SYNC_WORD       (0x40u + TEAM_NUMBER)    /* 0x47 for team 7 */
+#define LORA_PWR_PAD_DBM     10
+#define LORA_PWR_FLIGHT_DBM  14
+#define TX_AUTO_OFF_MIN      90u                      /* TX off this long after launch detection */

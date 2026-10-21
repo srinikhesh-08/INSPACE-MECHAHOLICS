@@ -145,6 +145,15 @@ static void handle_command(uint8_t op)
             ESP_LOGW(TAG, "TRIGGER_SEP ignored in %s", fsw_state_name(s_state));
         }
         break;
+    case CMD_START_TELEMETRY:
+        telemetry_set_tx(true);
+        break;
+    case CMD_STOP_TELEMETRY:
+        telemetry_set_tx(false);
+        break;
+    case CMD_SWITCH_CHANNEL:
+        telemetry_toggle_channel();
+        break;
     default:
         ESP_LOGW(TAG, "command 0x%02X not handled yet", op);
         break;
@@ -223,6 +232,7 @@ void fsw_core_start(void)
     s_cmd_q = xQueueCreate(8, sizeof(uint8_t));
     xTaskCreate(fsm_task, "fsm", 4096, NULL, 7, NULL);
     logger_start();
+    telemetry_start();
 }
 
 bool fsw_restored_info(float *p_ref, float *max_alt)

@@ -78,29 +78,3 @@ typedef struct {
     bool  impact_detected;    /* latched */
     bool  valid;              /* false until the pad reference is set */
 } abstract_state_t;
-/* ---- Telemetry packet: the exact bytes sent over LoRa ---- */
-#pragma pack(push, 1)
-typedef struct {
-    uint16_t team_number;
-    uint32_t mission_time;      /* s since power-on */
-    uint16_t packet_count;
-    float    altitude;          /* m AGL */
-    float    pressure;          /* Pa */
-    float    temperature;       /* degC */
-    float    voltage;           /* V */
-    uint32_t gnss_time;         /* HHMMSS */
-    float    latitude;
-    float    longitude;
-    float    gnss_altitude;     /* m MSL */
-    uint8_t  gnss_sats;
-    float    accel_x;
-    float    accel_y;
-    float    accel_z;
-    float    gyro_spin_rate;    /* deg/s */
-    uint8_t  flight_state;      /* fsw_state_t as a byte */
-    uint8_t  checksum;          /* XOR of bytes 0..57 */
-} telemetry_packet_t;
-#pragma pack(pop)
-
-_Static_assert(sizeof(telemetry_packet_t) == 59, "telemetry packet must be 59 bytes");
-_Static_assert(offsetof(telemetry_packet_t, checksum) == 58, "checksum must be the last byte");
