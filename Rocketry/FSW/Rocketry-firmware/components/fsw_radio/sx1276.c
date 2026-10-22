@@ -29,6 +29,8 @@ static spi_device_handle_t s_dev = NULL;
 #define REG_MODEM_CONFIG3   0x26
 #define REG_SYNC_WORD       0x39
 #define REG_VERSION         0x42
+#define REG_PKT_SNR         0x19
+#define REG_PKT_RSSI        0x1A
 
 #define MODE_LORA     0x80
 #define MODE_SLEEP    0x00
@@ -74,6 +76,8 @@ static void fifo_read(uint8_t *out, uint8_t len)
     memcpy(out, &rx[1], len);
 }
 
+static int   s_rssi = 0;
+static float s_snr  = 0.0f;
 esp_err_t lora_init(void)
 {
     spi_bus_config_t bus = {
@@ -180,6 +184,11 @@ int lora_poll_rx(uint8_t *buf, uint8_t max_len)
     wr(REG_IRQ_FLAGS, 0xFF);
     if (irq & IRQ_CRC_ERR) return 0;                  /* damaged packet: ignore it */
 
+    s_snr = (int8_t)rd(REG_PKT_SNR) / 4.0f;
+    int rssi = -157 + rd(REG_PKT_RSSI);           /* high-frequency port (above 525 MHz) */
+    if (s_snr < 0) rssi += (int)s_snr;            /* correction for packets below the noise floor */
+    s_rssi = rssi;
+
     uint8_t len = rd(REG_RX_NB_BYTES);
     if (len == 0 || len > max_len) return 0;
     wr(REG_FIFO_ADDR_PTR, rd(REG_FIFO_RX_CURRENT));
@@ -191,3 +200,6 @@ void lora_sleep(void)
 {
     wr(REG_OP_MODE, MODE_LORA | MODE_SLEEP);
 }
+
+int   lora_last_rssi(void) { return s_rssi; }
+float lora_last_snr(void)  { return s_snr; }

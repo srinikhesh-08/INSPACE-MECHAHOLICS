@@ -10,7 +10,7 @@ static const char *TAG = "console";
 
 static void console_task(void *arg)
 {
-    ESP_LOGI(TAG, "keys: t=ENTER_TEST  l=ENTER_LAUNCHPAD  p=toggle payload  c=toggle parachute  s=TRIGGER_SEP");
+        ESP_LOGI(TAG, "keys: t=ENTER_TEST  l=ENTER_LAUNCHPAD  p=toggle payload  c=toggle parachute  s=TRIGGER_SEP  o=TX ON  f=TX OFF  h=switch channel");
     while (true) {
         int c = getchar();
         if (c == EOF) {                          /* nothing typed: wait a bit */
@@ -23,6 +23,9 @@ static void console_task(void *arg)
         case 'p': fsw_post_command(CMD_TOGGLE_PAYLOAD);   break;
         case 'c': fsw_post_command(CMD_TOGGLE_PARACHUTE); break;
         case 's': fsw_post_command(CMD_TRIGGER_SEP);     break;
+        case 'o': fsw_post_command(CMD_START_TELEMETRY);  break;
+        case 'f': fsw_post_command(CMD_STOP_TELEMETRY);   break;
+        case 'h': fsw_post_command(CMD_SWITCH_CHANNEL);   break;
     #if USE_SIM_SENSORS
         case 'g':
             if (fsw_get_state() == ST_LAUNCH_PAD) {

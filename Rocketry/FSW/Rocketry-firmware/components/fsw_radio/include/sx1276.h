@@ -19,6 +19,8 @@ esp_err_t lora_send(const uint8_t *data, uint8_t len);       /* waits until sent
 void      lora_start_rx(void);                               /* listen (no transmission) */
 int       lora_poll_rx(uint8_t *buf, uint8_t max_len);       /* bytes received, 0 = nothing */
 void      lora_sleep(void);
+int   lora_last_rssi(void);      /* dBm of the last received packet */
+float lora_last_snr(void);       /* dB */
 #ifdef __cplusplus
 }
 #endif

@@ -66,7 +66,7 @@ static void apply_rates(fsw_state_t s)
              RATE_HZ[s][RT_DATA], RATE_HZ[s][RT_LOG]);
 }
 
-static void save_record(void)
+void fsw_save_record(void)
 {
     abstract_state_t a;
     shared_read_abstract(&a);
@@ -76,6 +76,8 @@ static void save_record(void)
     r.parachute_locked = s_parachute_locked;
     r.p_ref_pa         = a.p_ref_pa;
     r.max_alt_m        = a.max_alt_m;
+    r.radio_flags   = telemetry_get_flags();
+    r.launch_age_s  = telemetry_launch_age_s();
     persist_save(&r);
 }
 
@@ -105,7 +107,7 @@ static void enter_state(fsw_state_t next)
     default:
         break;
     }
-    save_record();
+    fsw_save_record();
 }
 
 static void handle_command(uint8_t op)
@@ -226,6 +228,7 @@ void fsw_core_start(void)
         s_rest_p_ref        = r.p_ref_pa;
         s_rest_max_alt      = r.max_alt_m;
         s_restored          = true;
+        telemetry_restore(r.radio_flags, r.launch_age_s);
         ESP_LOGW(TAG, "RESET RECOVERY: resuming in %s", fsw_state_name(s_state));
     }
 

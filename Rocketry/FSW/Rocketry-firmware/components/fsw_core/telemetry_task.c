@@ -61,6 +61,7 @@ void telemetry_set_tx(bool on)
     }
     s_tx_enabled = on;
     ESP_LOGW(TAG, "telemetry TX %s", on ? "ON" : "OFF");
+    fsw_save_record();
 }
 
 static void set_channel(bool backup)
@@ -68,11 +69,36 @@ static void set_channel(bool backup)
     s_backup = backup;
     s_retune = true;
     ESP_LOGW(TAG, "LoRa channel: %s", backup ? "BACKUP (867.25 MHz)" : "MAIN (865.50 MHz)");
+    fsw_save_record();
 }
 
 void telemetry_toggle_channel(void) { set_channel(!s_backup); }
 bool telemetry_tx_enabled(void)     { return s_tx_enabled; }
 bool telemetry_on_backup(void)      { return s_backup; }
+
+uint8_t telemetry_get_flags(void)
+{
+    return (s_tx_enabled ? 1u : 0u) | (s_backup ? 2u : 0u) | (s_tx_latched_off ? 4u : 0u);
+}
+
+uint16_t telemetry_launch_age_s(void)
+{
+    return (s_launch_ms != 0) ? (uint16_t)((now_ms() - s_launch_ms) / 1000u) : 0;
+}
+
+void telemetry_restore(uint8_t flags, uint16_t launch_age_s)
+{
+    s_tx_enabled     = (flags & 1u) != 0;
+    s_backup         = (flags & 2u) != 0;
+    s_tx_latched_off = (flags & 4u) != 0;
+    s_retune         = true;
+
+    /* the saved age is up to 30 s old, so add 30 s: the 90-minute cutoff can only come early, never late */
+    s_launch_ms = now_ms() - ((uint32_t)launch_age_s + 30u) * 1000u;
+    if (s_launch_ms == 0) s_launch_ms = 1;            /* 0 means "not launched yet" */
+    ESP_LOGW(TAG, "radio state restored: TX %s, %s channel, launch %u s ago",
+             s_tx_enabled ? "ON" : "OFF", s_backup ? "BACKUP" : "MAIN", (unsigned)launch_age_s + 30u);
+}
 
 /* Frequency by channel, power by state. Radio goes back to listening afterwards. */
 static void radio_apply(void)
@@ -90,10 +116,9 @@ static void radio_apply(void)
     }
 }
 
-/* ---- Telecommand frame from the ground, 6 bytes ----
-   [0] 0xA5 marker  [1] team number  [2] sequence  [3] opcode  [4] argument  [5] XOR of bytes 0..4 */
-#define TC_MARKER   0xA5
-#define TC_LEN      6
+/* ---- Telecommand frame from the ground, 5 bytes ----
+   [0] team number  [1] sequence  [2] opcode  [3] argument  [4] XOR of bytes 0..3 */
+#define TC_LEN      5
 
 static int s_last_seq = -1;            /* sequence of the last command executed (-1 = none yet) */
 
@@ -137,11 +162,11 @@ static void poll_air_commands(void)
 
     uint8_t x = 0;
     for (int k = 0; k < TC_LEN - 1; k++) x ^= f[k];
-    if (f[0] != TC_MARKER || f[1] != (uint8_t)TEAM_NUMBER || x != f[TC_LEN - 1]) {
-        return;                                   /* wrong marker, other team, or damaged */
+    if (f[0] != (uint8_t)TEAM_NUMBER || x != f[TC_LEN - 1]) {
+        return;                                   /* other team, or damaged */
     }
 
-    uint8_t seq = f[2], op = f[3], arg = f[4];
+    uint8_t seq = f[1], op = f[2], arg = f[3];
 
     if ((int)seq == s_last_seq) {                 /* a repeat of the last command: do not run it again */
         if (s_tx_enabled) send_ack(seq, op);      /* but answer again, in case the first ACK was lost */
@@ -168,7 +193,7 @@ static void telemetry_task(void *arg)
     uint32_t period_ms = 1000u / TELEMETRY_RATE_HZ;
     TickType_t last_wake = xTaskGetTickCount();
     char line[TLM_LINE_MAX];
-
+    uint32_t last_save_ms = 0;
     while (true) {
         uint32_t now = now_ms();
 
@@ -181,6 +206,7 @@ static void telemetry_task(void *arg)
             s_tx_latched_off = true;
             s_tx_enabled = false;
             ESP_LOGW(TAG, "90 minutes since launch: telemetry TX OFF");
+            fsw_save_record();
         }
 
         if (s_radio_ok) radio_apply();
