@@ -29,8 +29,8 @@ static const uint16_t RATE_HZ[ST_COUNT][RT_COUNT] = {
 
 static volatile fsw_state_t s_state = ST_BOOT;
 static uint32_t             s_enter_ms;
-static volatile bool s_payload_locked   = true;    /* cabinets are locked at power-on */
-static volatile bool s_parachute_locked = true;
+static volatile bool s_payload_locked   = false;   /* both cabinets are UNLOCKED after a clean boot */
+static volatile bool s_parachute_locked = false;
 static QueueHandle_t        s_cmd_q;
 static bool  s_restored = false;
 static float s_rest_p_ref = 0.0f;
@@ -197,8 +197,9 @@ static void fsm_task(void *arg)
     s_enter_ms = now_ms();
     ESP_LOGI(TAG, "starting in %s", fsw_state_name(s_state));
     apply_rates(s_state);
-    act_payload_lock();                         
-    act_parachute_lock();
+    /* re-assert what the flags say: unlocked after a clean boot, the saved position after a reset */
+    if (s_payload_locked)   act_payload_lock();   else act_payload_unlock();
+    if (s_parachute_locked) act_parachute_lock(); else act_parachute_unlock();
     TickType_t last_wake = xTaskGetTickCount();
     while (true) {
         uint8_t op;
@@ -216,7 +217,6 @@ static void fsm_task(void *arg)
 
 void fsw_core_start(void)
 {
-    act_init();
     persist_init();
 
     persist_record_t r;
@@ -231,7 +231,7 @@ void fsw_core_start(void)
         telemetry_restore(r.radio_flags, r.launch_age_s);
         ESP_LOGW(TAG, "RESET RECOVERY: resuming in %s", fsw_state_name(s_state));
     }
-
+    act_init(s_payload_locked, s_parachute_locked);    /* PWM starts at the position decided above */
     s_cmd_q = xQueueCreate(8, sizeof(uint8_t));
     xTaskCreate(fsm_task, "fsm", 4096, NULL, 7, NULL);
     logger_start();

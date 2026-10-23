@@ -1,5 +1,5 @@
 #pragma once
-
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,7 +10,7 @@ void act_payload_lock(void);
 void act_payload_unlock(void);
 void act_parachute_lock(void);
 void act_parachute_unlock(void);
-void act_init(void);    /* call once at startup: sets up PWM and drives both servos to LOCKED */
+void act_init(bool payload_locked, bool parachute_locked);   /* call once at startup, after the saved state is loaded: sets up PWM with each servo at its starting position */
 #ifdef __cplusplus
 }
 #endif

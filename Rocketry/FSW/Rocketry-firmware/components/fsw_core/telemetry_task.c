@@ -37,7 +37,7 @@ static int build_line(char *buf, size_t n)
         "%.2f,%.2f,%.2f,%.2f,%s\n",
         TEAM_ID_TEXT,
         (unsigned long)(now_ms() / 1000u),            /* TIME_S: seconds since power-on */
-        (unsigned long)++s_packet_count,
+        (unsigned long)s_packet_count,
         a.alt_agl_m, b.pressure_pa, b.temp_c,
         0.0,                                           /* VOLTAGE_V: battery reading comes at Stage 8 */
         (unsigned long)g.utc_hhmmss, g.lat, g.lon, g.alt_msl, (unsigned)g.sats,
@@ -116,17 +116,22 @@ static void radio_apply(void)
     }
 }
 
-/* ---- Telecommand frame from the ground, 5 bytes ----
-   [0] team number  [1] sequence  [2] opcode  [3] argument  [4] XOR of bytes 0..3 */
-#define TC_LEN      5
+/* ---- Telecommand packet from the ground, 6 bytes ----
+   [0] 0xAA sync  [1] team LSB  [2] team MSB  [3] opcode  [4] argument  [5] XOR of bytes 0..4 */
+#define TC_LEN      6
+#define TC_SYNC     0xAAu
 
-static int s_last_seq = -1;            /* sequence of the last command executed (-1 = none yet) */
+/* Last accepted toggle sequence per command (-1 = none yet). The toggle commands carry their
+   sequence number in the argument byte; a repeat of the same value is not executed again. */
+static int s_last_payload_seq   = -1;
+static int s_last_parachute_seq = -1;
 
-/* The reply is a short text line too, so the ground station only ever deals with text lines. */
-static void send_ack(uint8_t seq, uint8_t op)
+/* The reply is a short text line too. Format: ACK,<team>,<opcode hex>,<argument> */
+static void send_ack(uint8_t op, uint8_t arg)
 {
     char ack[32];
-    int n = snprintf(ack, sizeof(ack), "ACK,%03u,%u,%02X\n", (unsigned)TEAM_NUMBER, seq, op);
+    int n = snprintf(ack, sizeof(ack), "ACK,%03u,%02X,%u\n",
+                     (unsigned)TEAM_NUMBER, (unsigned)op, (unsigned)arg);
     if (n > 0 && n < (int)sizeof(ack)) {
         lora_send((const uint8_t *)ack, (uint8_t)n);
         lora_start_rx();
@@ -162,23 +167,29 @@ static void poll_air_commands(void)
 
     uint8_t x = 0;
     for (int k = 0; k < TC_LEN - 1; k++) x ^= f[k];
-    if (f[0] != (uint8_t)TEAM_NUMBER || x != f[TC_LEN - 1]) {
-        return;                                   /* other team, or damaged */
+    uint16_t team = (uint16_t)(f[1] | (f[2] << 8));
+    if (f[0] != TC_SYNC || team != (uint16_t)TEAM_NUMBER || x != f[TC_LEN - 1]) {
+        return;                                   /* no sync, other team, or damaged */
     }
 
-    uint8_t seq = f[1], op = f[2], arg = f[3];
+    uint8_t op = f[3], arg = f[4];
 
-    if ((int)seq == s_last_seq) {                 /* a repeat of the last command: do not run it again */
-        if (s_tx_enabled) send_ack(seq, op);      /* but answer again, in case the first ACK was lost */
+    /* Toggle commands carry a sequence number in the argument: a repeat must not toggle twice */
+    int *last = NULL;
+    if (op == CMD_TOGGLE_PAYLOAD)   last = &s_last_payload_seq;
+    if (op == CMD_TOGGLE_PARACHUTE) last = &s_last_parachute_seq;
+
+    if (last != NULL && (int)arg == *last) {
+        ESP_LOGI(TAG, "duplicate toggle op=0x%02X seq=%u ignored", op, arg);
+        if (s_tx_enabled) send_ack(op, arg);      /* answer again, in case the first ACK was lost */
         return;
     }
 
     bool ok = execute_command(op, arg);
-    ESP_LOGI(TAG, "air command seq=%u op=0x%02X arg=%u: %s", seq, op, arg,
-             ok ? "accepted" : "REJECTED");
+    ESP_LOGI(TAG, "air command op=0x%02X arg=%u: %s", op, arg, ok ? "accepted" : "REJECTED");
     if (ok) {
-        s_last_seq = seq;
-        if (s_tx_enabled) send_ack(seq, op);      /* never transmit while TX is off */
+        if (last != NULL) *last = arg;
+        if (s_tx_enabled) send_ack(op, arg);      /* never transmit while TX is off */
     }
 }
 
@@ -211,11 +222,16 @@ static void telemetry_task(void *arg)
 
         if (s_radio_ok) radio_apply();
 
+        /* the count advances only for packets built for transmission: it stays 0 until
+           CMD_START_TELEMETRY and stays frozen while TX is off */
+        bool tx_now = s_radio_ok && s_tx_enabled;
+        if (tx_now) s_packet_count++;
+
         /* build the line once, give the same text to the SD logger and the radio */
         int len = build_line(line, sizeof(line));
         if (len > 0 && len < (int)sizeof(line)) {
             logger_post_line(line);
-            if (s_radio_ok && s_tx_enabled) {
+            if (tx_now) {
                 if (lora_send((const uint8_t *)line, (uint8_t)len) != ESP_OK) {
                     ESP_LOGW(TAG, "LoRa send failed");
                 }

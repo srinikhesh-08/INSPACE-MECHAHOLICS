@@ -7,44 +7,6 @@ Single self-contained file (the local-only command selection lives in the
 
 Install:
     py -m pip install PySide6 pyserial pyqtgraph
-
-Run:
-    py rocket_ground_station_simulation.py
-
-DATA SOURCES (mutually exclusive -- the GUI never runs both at once)
-    * LIVE serial : newline-delimited JSON from the receiver ESP32 over USB/COM.
-    * SIMULATION  : built-in dummy flight. Every simulated packet carries
-                    "simulated": true and is labelled SIMULATED in the GUI.
-
-TELEMETRY FIELD NAMES
-    The canonical internal field names are those of the flight-software struct
-    `telemetry_packet_t` (team_number, mission_time, packet_count, altitude, pressure,
-    temperature, gnss_time, latitude, longitude, gnss_altitude, gnss_sats, accel_x/y/z,
-    gyro_spin_rate, flight_state, checksum). See TELEMETRY_FIELDS below.
-    The binary wire layout is NOT defined here: serialization is implemented separately
-    in C++, and this GUI does not parse binary data. Live input is JSON lines whose keys
-    use the names above. Older keys (altitude_m, temperature_c, lat, lon, ...) are still
-    accepted via LEGACY_ALIASES.
-
-    Example JSON line:
-    {"team_number":1234,"mission_time":42,"packet_count":42,"altitude":120.4,"pressure":98800.0,
-     "temperature":23.7,"gnss_time":120042,"latitude":17.98,"longitude":79.53,
-     "gnss_altitude":385.2,"gnss_sats":9,"accel_x":0.1,"accel_y":-0.2,"accel_z":9.9,
-     "gyro_spin_rate":12.5,"flight_state":3,"checksum":171}
-
-    Optional extras that are NOT part of the C struct: "gui_phase" (GUI-level phase label),
-    "simulated", and receiver-measured "rssi_dbm" / "snr_db".
-
-CHECKSUM CAUTION
-    The struct comment says checksum = XOR of bytes 0..57. Struct padding, alignment and
-    packing differ between compilers/layouts, so that byte range is only valid for one
-    specific byte representation. The GUI therefore NEVER validates or rejects packets
-    by checksum; a received value is shown as "unverified". Simulated packets carry no
-    checksum (shown as N/A).
-
-COMMANDS
-    The Flight Command Console is LOCAL ONLY. It stores the selected command in
-    the command_state class (in this file) and logs it. Nothing is transmitted over serial or LoRa.
 """
 
 import sys
@@ -82,8 +44,7 @@ except ImportError:
 # =====================================================================
 class command_state:
     """
-    LOCAL-ONLY command selection. Nothing here transmits anything: no serial write,
-    no LoRa uplink, no command frame. It only stores which command the operator selected.
+    Command selection and opcode table; sending is done by GroundStation.send_command.
     Opcodes mirror the flight-software enum cmd_opcode_t exactly.
 
     Read the current selection through the class (never copy it), so you always see the
@@ -100,12 +61,12 @@ class command_state:
         "CMD_ENTER_TEST":      {"opcode": 0x06, "description": "Enter test mode."},
         "CMD_ENTER_LAUNCHPAD": {"opcode": 0x07, "description": "Enter launch-pad state."},
         "CMD_SWITCH_CHANNEL":  {"opcode": 0x08,
-                                "description": "Switch radio channel (may need a future argument; none is accepted yet)."},
+                                "description": "Switch radio channel: MAIN (argument 0) or BACKUP (argument 1)."},
         "CMD_TRIGGER_SEP":     {"opcode": 0x09, "description": "Trigger separation mechanism."},
         "CMD_TOGGLE_PAYLOAD":  {"opcode": 0x0A, "description": "Toggle payload."},
         "CMD_TOGGLE_PARACHUTE": {"opcode": 0x0B, "description": "Toggle parachute mechanism."},
     }
-    COMMANDS_TRANSMITTED = False        # always False: no uplink exists in this version
+    COMMANDS_TRANSMITTED = True         # commands are sent through the bridge (see send_command)
 
     # Current selection (initial: CMD_NONE / 0x00). Overwritten by set_command().
     selected_command = "CMD_NONE"
@@ -144,6 +105,62 @@ class command_state:
     def reset(cls):
         cls.selected_command = "CMD_NONE"
         cls.selected_opcode = 0x00
+
+
+# =====================================================================
+# Six-byte telecommand packet (explicit byte encoding, no struct packing)
+#   [0] 0xAA sync  [1] team LSB  [2] team MSB  [3] opcode  [4] argument
+#   [5] XOR of bytes 0..4
+# =====================================================================
+TC_SYNC = 0xAA
+TC_TEAM_NUMBER = 7              # sent little-endian as 0x07 0x00
+
+
+def encode_command(opcode, argument=0):
+    """Return the six-byte telecommand packet as a bytes object."""
+    for name, value in (("opcode", opcode), ("argument", argument)):
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFF:
+            raise ValueError(f"{name} must be an integer from 0 to 255, got {value!r}")
+    packet = bytearray([
+        TC_SYNC,
+        TC_TEAM_NUMBER & 0xFF,
+        (TC_TEAM_NUMBER >> 8) & 0xFF,
+        opcode,
+        argument,
+    ])
+    checksum = 0
+    for byte in packet:
+        checksum ^= byte
+    packet.append(checksum)
+    return bytes(packet)
+
+def decode_command(packet):
+    """Validate a six-byte telecommand packet and return (opcode, argument).
+
+    Raises ValueError saying what is wrong. This checks packets in the same order
+    the rocket firmware will: length, sync, team number, checksum."""
+    packet = bytes(packet)
+    if len(packet) != 6:
+        raise ValueError(f"expected 6 bytes, got {len(packet)}")
+    if packet[0] != TC_SYNC:
+        raise ValueError(f"bad sync byte 0x{packet[0]:02X}")
+    team = packet[1] | (packet[2] << 8)
+    if team != TC_TEAM_NUMBER:
+        raise ValueError(f"wrong team number {team}")
+    expected = 0
+    for byte in packet[:5]:
+        expected ^= byte
+    if packet[5] != expected:
+        raise ValueError(f"bad checksum 0x{packet[5]:02X}, expected 0x{expected:02X}")
+    return packet[3], packet[4]
+
+
+# ---- Telecommand uplink settings ----
+TOGGLE_OPCODES = (0x0A, 0x0B)             # payload / parachute: the argument byte is a sequence number
+CHANNEL_ARGS = {"MAIN": 0, "BACKUP": 1}   # CMD_SWITCH_CHANNEL argument
+TC_REPEATS = 3                            # transmissions per request (the rocket is deaf while it transmits)
+TC_TICK_MS = 400                          # spacing between repeats
+TC_ACK_WAIT_TICKS = 5                     # ticks to wait for an ACK after the last repeat (2 s)
 
 
 # ---------- Palette ----------
@@ -203,6 +220,7 @@ TELEMETRY_FIELDS = [
     ("altitude", "float", "m AGL (barometric)", "Main altitude graph", "Barometric altitude"),
     ("pressure", "float", "Pa", "Overview + Telemetry", "Pressure"),
     ("temperature", "float", "degC", "Overview + Telemetry", "Temperature"),
+    ("voltage", "float", "V (firmware sends a 0.0 placeholder for now)", "Telemetry page", "Voltage"),
     ("gnss_time", "uint32_t", "HHMMSS", "GPS panel + Telemetry", "GNSS time"),
     ("latitude", "float", "unit not specified in struct", "GPS panel + Telemetry", "Latitude"),
     ("longitude", "float", "unit not specified in struct", "GPS panel + Telemetry", "Longitude"),
@@ -254,6 +272,64 @@ def parse_telemetry_line(line):
     if not isinstance(data, dict):
         raise ValueError("JSON root is not an object")
     return normalize_packet(data)
+
+
+# Rocket flight_state text (fsw_state_name) -> fsw_state_t number used by the GUI
+FSW_STATE_BY_NAME = {"BOOT": 0, "TEST_MODE": 1, "LAUNCH_PAD": 2, "ASCENT": 3,
+                     "PAYLOAD_SEP": 4, "DESCENT": 5, "IMPACT": 6}
+
+# The 17 ASCII telemetry columns in the order the rocket sends them: (column, GUI key, kind)
+ASCII_FIELDS = [
+    ("TEAM_ID", "team_number", "text"),
+    ("TIME_S", "mission_time", "int"),
+    ("PACKET_COUNT", "packet_count", "int"),
+    ("ALTITUDE_M", "altitude", "float"),
+    ("PRESSURE_PA", "pressure", "float"),
+    ("TEMP_C", "temperature", "float"),
+    ("VOLTAGE_V", "voltage", "float"),
+    ("GNSS_TIME", "gnss_time", "int"),
+    ("GNSS_LAT", "latitude", "float"),
+    ("GNSS_LON", "longitude", "float"),
+    ("GNSS_ALT_M", "gnss_altitude", "float"),
+    ("GNSS_SATS", "gnss_sats", "int"),
+    ("ACCEL_X", "accel_x", "float"),
+    ("ACCEL_Y", "accel_y", "float"),
+    ("ACCEL_Z", "accel_z", "float"),
+    ("GYRO_SPIN_DPS", "gyro_spin_rate", "float"),
+    ("FLIGHT_STATE", "flight_state", "state"),
+]
+ASCII_COLUMNS = [f[0] for f in ASCII_FIELDS]
+
+
+def parse_ascii_telemetry(line):
+    """Parse one rocket telemetry line (17 comma-separated ASCII fields).
+    Returns a dict with GUI keys plus "_raw_fields" (the 17 text fields as received).
+    Raises ValueError for anything malformed."""
+    fields = [f.strip() for f in line.split(",")]
+    if len(fields) != len(ASCII_FIELDS):
+        raise ValueError(f"expected {len(ASCII_FIELDS)} fields, got {len(fields)}")
+    data = {}
+    for text, (column, key, kind) in zip(fields, ASCII_FIELDS):
+        try:
+            if kind == "int":
+                data[key] = int(text)
+            elif kind == "float":
+                value = float(text)
+                if not math.isfinite(value):
+                    raise ValueError("not finite")
+                data[key] = value
+            elif kind == "state":
+                if text == "":
+                    raise ValueError("empty")
+                data[key] = FSW_STATE_BY_NAME.get(text.upper(), text)   # unknown name -> shown INVALID
+            else:
+                if text == "":
+                    raise ValueError("empty")
+                data[key] = text
+        except ValueError:
+            raise ValueError(f"{column} is not valid: {text!r}")
+    data["_raw_fields"] = fields
+    return data
 
 
 def describe_flight_state(value):
@@ -494,6 +570,14 @@ class GroundStation(QMainWindow):
         self.csv_handle = None
         self.csv_writer = None
 
+
+        # ---- Telecommand uplink ----
+        self.pending_cmd = None                     # the one request currently being sent
+        self.toggle_seq = {0x0A: 0, 0x0B: 0}        # independent 8-bit sequence counters
+        self.cmd_timer = QTimer(self)
+        self.cmd_timer.timeout.connect(self.cmd_tick)
+
+
         self.setStyleSheet(f"""
             QMainWindow, QWidget {{ background:{BG}; color:{TEXT}; }}
             QScrollArea {{ border:none; background:{BG}; }}
@@ -698,7 +782,7 @@ class GroundStation(QMainWindow):
         self.refresh_command_display()
         self.add_event("Ground station initialized.")
         self.add_event("Protocol: newline-delimited JSON from the receiver ESP32 (canonical telemetry_packet_t field names).")
-        self.add_event("Flight Command Console is LOCAL ONLY: commands are stored, never transmitted.")
+        self.add_event("Flight Command Console sends commands through the bridge (requires a live connection).")
 
     # ---------- Page construction ----------
     def make_plot(self, left_label):
@@ -957,10 +1041,11 @@ class GroundStation(QMainWindow):
         badge.setObjectName("warnBadge")
         badge_layout = QVBoxLayout(badge)
         badge_layout.setContentsMargins(14, 10, 14, 10)
-        badge_layout.addWidget(make_label("⚠  LOCAL STORAGE ONLY — NOT TRANSMITTED", 11, AMBER, True))
+        badge_layout.addWidget(make_label("⚠  LIVE UPLINK — ACK ≠ EXECUTION", 11, AMBER, True))
         info = make_label(
-            "Commands are stored in a local variable and logged. No serial write, LoRa uplink or command frame exists "
-            "in this version. Nothing reaches the rocket, and no hardware is ever activated.", 9, "#D9C48A")
+            "Commands are sent through the bridge to the rocket. An ACK means the rocket received and validated "
+            "the packet; it does not confirm that the FSW accepted it or that anything moved. "
+            "Needs a live bridge connection.", 9, "#D9C48A")
         info.setWordWrap(True)
         badge_layout.addWidget(info)
         top.addWidget(badge, 5)
@@ -970,7 +1055,7 @@ class GroundStation(QMainWindow):
         splitter.setChildrenCollapsible(False)
 
         # Left: terminal-style console
-        terminal = SectionPanel("COMMAND TERMINAL", "LOCAL ONLY")
+        terminal = SectionPanel("COMMAND TERMINAL", "UPLINK VIA BRIDGE")
         self.cmd_history = QPlainTextEdit()
         self.cmd_history.setReadOnly(True)
         mono = QFont("Consolas", 10)
@@ -987,10 +1072,10 @@ class GroundStation(QMainWindow):
         input_row.addWidget(prompt)
         self.cmd_input = QLineEdit()
         self.cmd_input.setFont(mono)
-        self.cmd_input.setPlaceholderText("Type a command name, e.g. CMD_START_TELEMETRY, then press Enter")
+        self.cmd_input.setPlaceholderText("Type a command, e.g. CMD_START_TELEMETRY or CMD_SWITCH_CHANNEL BACKUP, then press Enter")
         self.cmd_input.returnPressed.connect(self.submit_command_from_input)
         input_row.addWidget(self.cmd_input, 1)
-        self.cmd_store_button = QPushButton("Store Command")
+        self.cmd_store_button = QPushButton("Send Command")
         self.cmd_store_button.setObjectName("primaryButton")
         self.cmd_store_button.clicked.connect(self.submit_command_from_input)
         input_row.addWidget(self.cmd_store_button)
@@ -1003,9 +1088,16 @@ class GroundStation(QMainWindow):
         picker_row = QHBoxLayout()
         self.cmd_combo = QComboBox()
         for name, entry in command_state.COMMANDS.items():
+            if name == "CMD_NONE":
+                continue                                    # not an operator command
+            if name == "CMD_SWITCH_CHANNEL":
+                for channel in CHANNEL_ARGS:
+                    self.cmd_combo.addItem(f"{name} {channel}  ({command_state.opcode_hex(entry['opcode'])})",
+                                           f"{name} {channel}")
+                continue
             self.cmd_combo.addItem(f"{name}  ({command_state.opcode_hex(entry['opcode'])})", name)
         picker_row.addWidget(self.cmd_combo, 1)
-        self.cmd_use_button = QPushButton("Store Selected")
+        self.cmd_use_button = QPushButton("Send Selected")
         self.cmd_use_button.clicked.connect(self.submit_command_from_combo)
         picker_row.addWidget(self.cmd_use_button)
         self.cmd_clear_button = QPushButton("Clear History")
@@ -1118,7 +1210,7 @@ class GroundStation(QMainWindow):
             "Flight computer: ESP32  •  Barometer: BMP585  •  IMU: BNO086  •  Radio: SX1276 LoRa  •  GPS: NEO-M6\n"
             "Ground receiver: antenna + SX1276 + ESP32, connected to this computer by USB.\n\n"
             "This interface is a telemetry dashboard, not a flight-control system. It does not transmit anything to the "
-            "rocket: the Flight Command Console only stores the selected command locally. It does not replace onboard safety logic.",
+            "rocket: the Flight Command Console sends commands through the bridge. It does not replace onboard safety logic.",
             9, TEXT
         )
         hardware_text.setWordWrap(True)
@@ -1417,12 +1509,33 @@ class GroundStation(QMainWindow):
                 line, self.buffer = self.buffer.split("\n", 1)
                 line = line.strip().lstrip("\ufeff")
                 if line:
-                    self.ingest_line(line, "LIVE")
+                    self.handle_bridge_line(line)
         except Exception as exc:
             self.add_event(f"Serial read error: {exc}")
             self.disconnect_serial()
-
-    def ingest_line(self, line, source, t_x=None):
+    def handle_bridge_line(self, line):
+        """Classify one bridge line: RX|rssi|snr|payload, INFO|..., ERR|..., or other text."""
+        if line.startswith("RX|"):
+            parts = line.split("|", 3)
+            try:
+                if len(parts) != 4:
+                    raise ValueError("incomplete RX line")
+                extra = {"rssi_dbm": float(parts[1]), "snr_db": float(parts[2])}
+            except ValueError:
+                self.ingest_line(line, "LIVE")          # counted as a malformed packet
+                return
+            payload = parts[3].strip()
+            if payload.startswith("ACK,"):              # rocket reply, not telemetry
+                self.handle_rocket_ack(payload, parts[1])
+                return
+            self.ingest_line(payload, "LIVE", extra=extra)
+        elif line.startswith(("INFO|", "ERR|")):
+            self.add_event(f"Bridge: {line[:180]}")
+            self.note_bridge_status(line)
+        else:
+            self.add_event(f"Bridge text: {line[:180]}")   # e.g. boot output; not counted as a bad packet
+    
+    def ingest_line(self, line, source, t_x=None, extra=None):
         """
         Single entry point for telemetry. `source` is "LIVE" (serial) or "SIM"; it is decided by
         the CALLER, never by packet content. Packets from the inactive source are dropped.
@@ -1433,7 +1546,7 @@ class GroundStation(QMainWindow):
         if source == "SIM" and not self.simulation_active:
             return
         try:
-            data = parse_telemetry_line(line)
+            data = parse_ascii_telemetry(line) if source == "LIVE" else parse_telemetry_line(line)
         except ValueError:
             self.bad_packets += 1
             self.bad_value.setText(str(self.bad_packets))
@@ -1441,6 +1554,10 @@ class GroundStation(QMainWindow):
             if line and not line.startswith("{"):
                 self.add_event(f"Receiver text: {line[:180]}")
             return
+
+        raw_fields = data.pop("_raw_fields", None)   # the 17 text fields exactly as received
+        if extra:
+            data.update(extra)                        # RSSI / SNR reported by the bridge
 
         now = time.monotonic()
         if source == "LIVE":
@@ -1543,8 +1660,8 @@ class GroundStation(QMainWindow):
         self.footer_status.setText(
             f"{'SIMULATED' if source == 'SIM' else 'Last valid'} packet · {datetime.now().strftime('%H:%M:%S')} · {len(data)} field(s)"
         )
-        if self.csv_writer is not None:
-            self.write_csv_row(data, source, t_x, phase, state_text)
+        if self.csv_writer is not None and source == "LIVE" and raw_fields is not None:
+            self.write_csv_row(raw_fields)
 
         phase_key = phase or state_text
         if phase_key and phase_key != self.last_phase_key:
@@ -1576,6 +1693,9 @@ class GroundStation(QMainWindow):
 
     def card_value(self, key, data, velocity, state_text):
         """Value shown on a Telemetry-page card for field `key`."""
+        if key == "team_number":
+            value = data.get("team_number")
+            return None if value is None else str(value)
         if key == "vertical_velocity":
             return velocity
         if key == "flight_state":
@@ -1663,26 +1783,177 @@ class GroundStation(QMainWindow):
         self.cmd_dec_card.set_value(str(command_state.selected_opcode))
         self.cmd_hex_card.set_value(command_state.opcode_hex())
 
+    def cmd_note(self, text, color=GREEN, bold=False):
+        self.cmd_feedback.setText(text)
+        self.cmd_feedback.setStyleSheet(f"color:{color};font-size:9px;font-weight:{700 if bold else 400};")
+
+    def cmd_log(self, text):
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cmd_history.appendPlainText(f"[{stamp}] {text}")
+        self.add_event(text)
+
+    def cmd_reject(self, text):
+        self.cmd_note(text, RED, True)
+        self.add_event(text)
+
+    def confirm_action(self, title, text):
+        """Single place for yes/no pop-ups (also makes headless testing easy). Default answer: No."""
+        answer = QMessageBox.question(self, title, text,
+                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return answer == QMessageBox.Yes
+
     def apply_command(self, text):
-        ok, result = command_state.set_command(text)
+        """Validate the typed/selected command, then send it to the rocket through the bridge."""
+        parts = text.split() if isinstance(text, str) else []
+        ok, result = command_state.set_command(parts[0] if parts else "")
+        if ok and result == "CMD_NONE":
+            ok, result = False, "CMD_NONE is not an operator command."
+        arg = 0
         if ok:
-            stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            line = (f"[{stamp}] STORED LOCALLY (NOT TRANSMITTED): {command_state.selected_command}  "
-                    f"opcode {command_state.selected_opcode} ({command_state.opcode_hex()})")
-            self.cmd_history.appendPlainText(line)
-            self.cmd_feedback.setText(
-                f"Stored locally: {command_state.selected_command} = {command_state.opcode_hex()}. "
-                "NOT transmitted; the rocket has not received anything.")
-            self.cmd_feedback.setStyleSheet(f"color:{GREEN};font-size:9px;font-weight:400;")
-            self.cmd_input.clear()
-            self.add_event(f"Command stored locally (NOT transmitted): {command_state.selected_command} "
-                           f"{command_state.opcode_hex()}")
+            word = parts[1].upper() if len(parts) > 1 else None
+            if result == "CMD_SWITCH_CHANNEL":
+                if word not in CHANNEL_ARGS:
+                    ok, result = False, "CMD_SWITCH_CHANNEL needs MAIN or BACKUP, e.g. CMD_SWITCH_CHANNEL BACKUP."
+                else:
+                    arg = CHANNEL_ARGS[word]
+            elif word is not None:
+                ok, result = False, f"{result} takes no argument (toggle sequence numbers are automatic)."
+        if ok:
+            ok = self.send_command(result, arg)
+            if ok:
+                self.cmd_input.clear()
         else:
-            self.cmd_feedback.setText(f"ERROR: {result}")
-            self.cmd_feedback.setStyleSheet(f"color:{RED};font-size:9px;font-weight:700;")
-            self.add_event(f"Command rejected (invalid input); selection unchanged: {command_state.selected_command}")
+            self.cmd_note(f"ERROR: {result}", RED, True)
+            self.add_event(f"Command rejected (invalid input): {result}")
         self.refresh_command_display()
         return ok
+
+    def send_command(self, name, arg):
+        """Encode one request and start sending it. Returns True if the request was started."""
+        opcode = command_state.COMMANDS[name]["opcode"]
+        if self.simulation_active or not self.connected or self.serial_port is None:
+            self.cmd_reject("Not sent: no live bridge connection (connect the bridge; stop the simulation).")
+            return False
+        if self.pending_cmd is not None:
+            self.cmd_reject("Not sent: the previous command is still in progress.")
+            return False
+        if opcode in TOGGLE_OPCODES:
+            state = self.latest.get("flight_state")
+            if isinstance(state, int) and state > 2:        # 2 = ST_LAUNCH_PAD; the firmware also refuses
+                self.cmd_reject(f"Not sent: telemetry shows the rocket has left LAUNCH_PAD (state {state}).")
+                return False
+        if name == "CMD_TRIGGER_SEP":
+            if not self.confirm_action("Confirm separation",
+                                       "Send CMD_TRIGGER_SEP?\n\nThis triggers the separation mechanism "
+                                       "if the rocket accepts it."):
+                self.cmd_log("CMD_TRIGGER_SEP cancelled by the operator (not sent).")
+                return False
+        if opcode in TOGGLE_OPCODES:
+            arg = self.toggle_seq[opcode]                    # the argument IS this request's sequence number
+            self.toggle_seq[opcode] = (arg + 1) & 0xFF
+        packet = encode_command(opcode, arg)
+        hex_text = " ".join(f"{b:02X}" for b in packet)
+        self.pending_cmd = {
+            "name": name, "opcode": opcode, "arg": arg, "hex": hex_text,
+            "line": f"CMD {hex_text}\n".encode(),            # the same bytes are reused for every repeat
+            "sent": 0, "ticks": 0, "bridge_tx": 0,
+            "channel": ("BACKUP" if arg else "MAIN") if opcode == 0x08 else None,
+        }
+        self.cmd_log(f"{name} opcode {command_state.opcode_hex(opcode)} arg {arg}: {hex_text}")
+        self.cmd_note(f"{name} sent to the bridge; waiting for the rocket's ACK. "
+                      "An ACK is not proof the action was carried out.", AMBER)
+        if self.cmd_transmit():
+            self.cmd_timer.start(TC_TICK_MS)
+        return True
+
+    def cmd_transmit(self):
+        p = self.pending_cmd
+        try:
+            self.serial_port.write(p["line"])
+        except Exception as exc:
+            self.cmd_log(f"{p['name']}: serial write FAILED ({exc}); not sent.")
+            self.cmd_note(f"Serial write failed: {exc}", RED, True)
+            self.cmd_finish()
+            return False
+        p["sent"] += 1
+        p["ticks"] = 0
+        self.cmd_log(f"WRITTEN to serial ({p['sent']}/{TC_REPEATS}): {p['hex']}")
+        return True
+
+    def cmd_tick(self):
+        p = self.pending_cmd
+        if p is None:
+            self.cmd_timer.stop()
+            return
+        if not self.connected or self.serial_port is None:
+            self.cmd_log(f"{p['name']}: connection lost before an ACK arrived.")
+            self.cmd_finish()
+            return
+        p["ticks"] += 1
+        if p["sent"] < TC_REPEATS:
+            self.cmd_transmit()
+        elif p["ticks"] >= TC_ACK_WAIT_TICKS:
+            self.cmd_no_ack()
+
+    def cmd_finish(self):
+        self.pending_cmd = None
+        self.cmd_timer.stop()
+
+    def cmd_no_ack(self):
+        p = self.pending_cmd
+        self.cmd_finish()
+        if p["opcode"] == 0x02:
+            self.cmd_log("CMD_STOP_TELEMETRY: no ACK is expected (the rocket turns TX off first). "
+                         "Confirm by watching telemetry stop.")
+            self.cmd_note("STOP sent. No ACK is expected; confirm by telemetry stopping.", AMBER)
+            return
+        self.cmd_log(f"NO ACK for {p['name']} arg {p['arg']} after {p['sent']} transmissions. Delivery unknown: "
+                     "the rocket only ACKs while its telemetry is ON, and the ACK itself may have been lost.")
+        self.cmd_note(f"No ACK for {p['name']}. Delivery unknown.", RED, True)
+        if p["channel"] is not None and self.confirm_action(
+                "No ACK for channel switch",
+                f"No ACK was received. The rocket may or may not have switched to {p['channel']}.\n\n"
+                f"Retune the bridge to {p['channel']} anyway?"):
+            self.bridge_retune(p["channel"])
+
+    def handle_rocket_ack(self, payload, rssi_text):
+        """payload: ACK,<team>,<opcode hex>,<argument>"""
+        parts = payload.split(",")
+        try:
+            if len(parts) != 4 or parts[0] != "ACK":
+                raise ValueError
+            team, op, arg = int(parts[1]), int(parts[2], 16), int(parts[3])
+        except ValueError:
+            self.add_event(f"Malformed ACK ignored: {payload[:60]}")
+            return
+        p = self.pending_cmd
+        if p is None or team != TC_TEAM_NUMBER or op != p["opcode"] or arg != p["arg"]:
+            self.add_event(f"Rocket ACK with no matching pending command (repeat or late): {payload}")
+            return
+        self.cmd_finish()
+        self.cmd_log(f"ACK received (RSSI {rssi_text} dBm): the rocket received and validated {p['name']} "
+                     f"arg {p['arg']}. Not reported: FSW acceptance or execution.")
+        self.cmd_note(f"{p['name']}: ACK received (rocket received and validated it). "
+                      "Execution is NOT confirmed.", GREEN)
+        if p["channel"] is not None:
+            self.bridge_retune(p["channel"])               # the ACK left on the old channel; now follow
+
+    def note_bridge_status(self, line):
+        p = self.pending_cmd
+        if p is None:
+            return
+        if line.startswith("INFO|sent"):
+            p["bridge_tx"] += 1
+            self.cmd_log(f"BRIDGE transmitted over radio ({p['bridge_tx']}/{p['sent']}): {line[5:]}")
+        elif line.startswith("ERR|send failed"):
+            self.cmd_log("BRIDGE reported: radio send FAILED")
+
+    def bridge_retune(self, channel):
+        try:
+            self.serial_port.write(f"CH {channel}\n".encode())
+            self.cmd_log(f"BRIDGE retune requested: CH {channel} (it should answer INFO|listening on ...)")
+        except Exception as exc:
+            self.cmd_log(f"BRIDGE retune write FAILED: {exc}")
 
     def submit_command_from_input(self):
         return self.apply_command(self.cmd_input.text())
@@ -1739,8 +2010,7 @@ class GroundStation(QMainWindow):
         try:
             self.csv_handle = open(path, "w", newline="", encoding="utf-8")
             self.csv_writer = csv.writer(self.csv_handle)
-            self.csv_writer.writerow(["received_at", "run_id", "source", "elapsed_s", "packet_count",
-                                      "mission_phase", "flight_state", "raw_json"])
+            self.csv_writer.writerow(ASCII_COLUMNS)
             self.record_button.setText("Stop CSV recording")
             self.add_event(f"CSV recording started: {path}")
         except Exception as exc:
@@ -1748,19 +2018,11 @@ class GroundStation(QMainWindow):
             self.csv_writer = None
             QMessageBox.critical(self, "Recording failed", str(exc))
 
-    def write_csv_row(self, data, source, t_x, phase, state_text):
+    def write_csv_row(self, raw_fields):
+        """One row per valid LIVE packet: the 17 fields exactly as the rocket sent them."""
         if self.csv_writer is None or self.csv_handle is None:
             return
-        self.csv_writer.writerow([
-            datetime.now().isoformat(timespec="milliseconds"),
-            self.run_id,
-            "SIMULATED" if source == "SIM" else "LIVE",
-            f"{t_x:.3f}",
-            data.get("packet_count", ""),
-            phase or "",
-            state_text,
-            json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-        ])
+        self.csv_writer.writerow(raw_fields)
         self.csv_handle.flush()
 
     def export_csv(self):
@@ -1834,7 +2096,7 @@ class GroundStation(QMainWindow):
             self.set_link_status("offline", "Connect the ground ESP32 using USB")
 
     def closeEvent(self, event):
-        for timer in (self.simulation_timer, self.poll_timer, self.ui_timer):
+        for timer in (self.simulation_timer, self.poll_timer, self.ui_timer, self.cmd_timer):
             timer.stop()
         self.simulation_active = False
         if self.csv_handle is not None:

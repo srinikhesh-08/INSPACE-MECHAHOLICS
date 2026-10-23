@@ -32,7 +32,7 @@ static void servo_move(ledc_channel_t ch, float deg)
     }
 }
 
-void act_init(void)
+void act_init(bool payload_locked, bool parachute_locked)
 {
     ledc_timer_config_t timer = {
         .speed_mode      = SERVO_MODE,
@@ -43,24 +43,27 @@ void act_init(void)
     };
     ESP_ERROR_CHECK(ledc_timer_config(&timer));
 
-    /* The initial duty is the LOCKED position, so both servos lock as soon as PWM starts. */
+     /* The initial duty is the position the FSW wants (unlocked on a clean boot, the saved position
+       after an in-flight reset), so a servo never moves just because PWM starts. */
     ledc_channel_config_t ch = {
         .gpio_num   = SERVO_PAYLOAD_GPIO,
         .speed_mode = SERVO_MODE,
         .channel    = SERVO_CH_PAYLOAD,
         .intr_type  = LEDC_INTR_DISABLE,
         .timer_sel  = SERVO_TIMER,
-        .duty       = angle_to_duty(SERVO_LOCKED_DEG),
+        .duty       = angle_to_duty(payload_locked ? SERVO_LOCKED_DEG : SERVO_UNLOCKED_DEG),
         .hpoint     = 0,
     };
     ESP_ERROR_CHECK(ledc_channel_config(&ch));
 
     ch.gpio_num = SERVO_PARACHUTE_GPIO;
     ch.channel  = SERVO_CH_CHUTE;
+    ch.duty     = angle_to_duty(parachute_locked ? SERVO_LOCKED_DEG : SERVO_UNLOCKED_DEG);
     ESP_ERROR_CHECK(ledc_channel_config(&ch));
 
-    ESP_LOGI(TAG, "servo PWM ready: payload GPIO%d, parachute GPIO%d, both LOCKED",
-             SERVO_PAYLOAD_GPIO, SERVO_PARACHUTE_GPIO);
+    ESP_LOGI(TAG, "servo PWM ready: payload GPIO%d %s, parachute GPIO%d %s",
+             SERVO_PAYLOAD_GPIO, payload_locked ? "LOCKED" : "UNLOCKED",
+             SERVO_PARACHUTE_GPIO, parachute_locked ? "LOCKED" : "UNLOCKED");
 }
 
 void act_payload_lock(void)

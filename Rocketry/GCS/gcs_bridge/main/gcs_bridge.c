@@ -19,7 +19,7 @@ static void tune(const char *name, uint32_t hz)
     printf("INFO|listening on %s %lu Hz\n", name, (unsigned long)hz);
 }
 
-/* Lines from the laptop:   CH MAIN | CH BACKUP | CMD <hex bytes>   e.g.  CMD 07 01 01 00 07 */
+/* Lines from the laptop:   CH MAIN | CH BACKUP | CMD <hex bytes>   e.g.  CMD AA 07 00 01 00 AC */
 static void handle_line(char *line)
 {
     if (strcmp(line, "CH MAIN") == 0)   { tune("MAIN", MAIN_HZ);     return; }
