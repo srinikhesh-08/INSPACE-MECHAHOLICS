@@ -38,8 +38,9 @@ static void data_layer_task(void *arg)
         dl_recalibrate(&ctx);                  /* does nothing once launch is detected */
         ESP_LOGI(TAG, "barometer recalibration started");
     }
-
+    health_watch_this_task();
     while (true) {
+        health_feed();
         baro_data_t b;
         imu_data_t  i;
         shared_read_baro(&b);

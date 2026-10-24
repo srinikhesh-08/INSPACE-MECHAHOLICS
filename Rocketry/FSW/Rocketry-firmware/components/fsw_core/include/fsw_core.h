@@ -28,6 +28,13 @@ bool        fsw_payload_locked(void);
 bool        fsw_parachute_locked(void);
 /* true if the FSM resumed from a saved state after a reset */
 bool fsw_restored_info(float *p_ref, float *max_alt);   /* pointers may be NULL */
+
+void     health_start(void);
+uint32_t health_faults(void);
+void     health_watch_this_task(void);
+void     health_feed(void);
+bool     telemetry_radio_ok(void);
+
 #ifdef __cplusplus
 }
 #endif

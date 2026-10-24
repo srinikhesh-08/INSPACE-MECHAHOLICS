@@ -76,6 +76,7 @@ static void set_channel(bool backup)
 void telemetry_toggle_channel(void) { set_channel(!s_backup); }
 bool telemetry_tx_enabled(void)     { return s_tx_enabled; }
 bool telemetry_on_backup(void)      { return s_backup; }
+bool telemetry_radio_ok(void) { return s_radio_ok; }
 
 uint8_t telemetry_get_flags(void)
 {
@@ -202,11 +203,13 @@ static void telemetry_task(void *arg)
     }
 
     rate_register(RT_LOG);                            /* the FSM rate table drives the packet rate */
+    health_watch_this_task();
     uint32_t period_ms = 1000u / TELEMETRY_RATE_HZ;
     TickType_t last_wake = xTaskGetTickCount();
     char line[TLM_LINE_MAX];
     uint32_t last_save_ms = 0;
     while (true) {
+        health_feed();
         uint32_t now = now_ms();
 
         /* 90 minutes after launch detection the transmitter switches itself off for good */
@@ -255,6 +258,7 @@ static void telemetry_task(void *arg)
                 poll_air_commands();
                 radio_apply();                        /* applies a channel change at once */
             }
+            health_feed();
             vTaskDelay(pdMS_TO_TICKS(50));
         }
     }

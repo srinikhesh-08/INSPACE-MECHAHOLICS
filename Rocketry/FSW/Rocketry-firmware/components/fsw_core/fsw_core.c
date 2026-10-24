@@ -232,7 +232,10 @@ static void fsm_task(void *arg)
     if (s_payload_locked)   act_payload_lock();   else act_payload_unlock();
     if (s_parachute_locked) act_parachute_lock(); else act_parachute_unlock();
     TickType_t last_wake = xTaskGetTickCount();
+    health_watch_this_task();
+
     while (true) {
+        health_feed();
         uint8_t op;
         while (xQueueReceive(s_cmd_q, &op, 0) == pdTRUE) {
             handle_command(op);
@@ -267,6 +270,7 @@ void fsw_core_start(void)
     xTaskCreate(fsm_task, "fsm", 4096, NULL, 7, NULL);
     logger_start();
     telemetry_start();
+    health_start();
 }
 
 bool fsw_restored_info(float *p_ref, float *max_alt)
