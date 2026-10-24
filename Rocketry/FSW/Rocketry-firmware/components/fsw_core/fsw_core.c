@@ -8,6 +8,8 @@
 #include "actuators.h"
 #include "fsw_core.h"
 #include "persist.h"
+#include "sensors.h"
+#include "data_layer.h"
 
 static const char *TAG = "fsm";
 
@@ -155,6 +157,35 @@ static void handle_command(uint8_t op)
         break;
     case CMD_SWITCH_CHANNEL:
         telemetry_toggle_channel();
+        break;
+        case CMD_CALIBRATE_BARO:
+        if (s_state == ST_LAUNCH_PAD) {
+            data_layer_request_recal();
+        } else {
+            ESP_LOGW(TAG, "CAL_BARO ignored in %s (LAUNCH_PAD only)", fsw_state_name(s_state));
+        }
+        break;
+    case CMD_CALIBRATE_GYRO:
+        if (s_state != ST_LAUNCH_PAD) {
+            ESP_LOGW(TAG, "CAL_GYRO ignored in %s (LAUNCH_PAD only)", fsw_state_name(s_state));
+            break;
+        }
+#if USE_SIM_SENSORS
+        ESP_LOGW(TAG, "simulation: there is no real gyro to calibrate");
+#else
+        imu_calibrate_gyro();
+#endif
+        break;
+    case CMD_CALIBRATE_ACCEL:
+        if (s_state != ST_LAUNCH_PAD) {
+            ESP_LOGW(TAG, "CAL_ACCEL ignored in %s (LAUNCH_PAD only)", fsw_state_name(s_state));
+            break;
+        }
+#if USE_SIM_SENSORS
+        ESP_LOGW(TAG, "simulation: there is no real accelerometer to calibrate");
+#else
+        imu_calibrate_accel();
+#endif
         break;
     default:
         ESP_LOGW(TAG, "command 0x%02X not handled yet", op);

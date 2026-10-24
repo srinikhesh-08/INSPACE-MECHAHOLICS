@@ -40,7 +40,8 @@ void dl_step(dl_ctx_t *c, uint32_t t_ms, float pressure_pa, float accel_mag,
 
 /* Starts the data layer task (reads shared baro and IMU, writes shared abstract) */
 void data_layer_start(void);
-
+/* Ask the data layer task for a new pad pressure reference (ignored after launch). */
+void data_layer_request_recal(void);
 #ifdef __cplusplus
 }
 #endif

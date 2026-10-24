@@ -10,6 +10,13 @@
 
 static const char *TAG = "data";
 
+static volatile bool s_recal_requested = false;
+
+void data_layer_request_recal(void)
+{
+    s_recal_requested = true;
+}
+
 static void data_layer_task(void *arg)
 {
     dl_ctx_t ctx;
@@ -25,6 +32,12 @@ static void data_layer_task(void *arg)
     uint32_t period_ms = 1000u / DL_RATE_HZ;
     bool was_valid = false, was_launch = false, was_apogee = false, was_impact = false;
     TickType_t last_wake = xTaskGetTickCount();
+
+    if (s_recal_requested) {
+        s_recal_requested = false;
+        dl_recalibrate(&ctx);                  /* does nothing once launch is detected */
+        ESP_LOGI(TAG, "barometer recalibration started");
+    }
 
     while (true) {
         baro_data_t b;

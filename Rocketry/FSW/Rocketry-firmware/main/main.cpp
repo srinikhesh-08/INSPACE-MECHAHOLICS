@@ -19,11 +19,13 @@ static void monitor_task(void *arg)
         (unsigned long)a.t_ms, fsw_state_name(fsw_get_state()),
         a.alt_agl_m, a.vel_mps, fsw_payload_locked(), fsw_parachute_locked(),
         a.launch_detected, a.apogee_detected, a.impact_detected);
-        baro_data_t b;  gnss_data_t g;
-        shared_read_baro(&b);  shared_read_gnss(&g);
+        baro_data_t b;  gnss_data_t g;  imu_data_t im;
+        shared_read_baro(&b);  shared_read_gnss(&g);  shared_read_imu(&im);
         printf("BARO ok=%d p=%.0f Pa T=%.1f C | GNSS ok=%d lat=%.5f lon=%.5f alt=%.1f sats=%u utc=%lu\n",
                b.valid, b.pressure_pa, b.temp_c, g.valid, g.lat, g.lon, g.alt_msl,
                (unsigned)g.sats, (unsigned long)g.utc_hhmmss);
+        printf("IMU ok=%d a=(%.2f %.2f %.2f) m/s2  g=(%.1f %.1f %.1f) deg/s\n",
+                im.valid, im.ax, im.ay, im.az, im.gx, im.gy, im.gz);
         vTaskDelay(pdMS_TO_TICKS(1000));
         }
 
@@ -36,8 +38,7 @@ extern "C" void app_main(void)
 #if USE_SIM_SENSORS
     sim_sensors_start();
 #else
-    baro_start();
-    gnss_start();
+    sensors_start();
 #endif
     data_layer_start();
 #if USE_DEBUG_CONSOLE

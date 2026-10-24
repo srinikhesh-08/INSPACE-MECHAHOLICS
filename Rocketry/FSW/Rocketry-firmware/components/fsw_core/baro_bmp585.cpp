@@ -7,6 +7,7 @@
 #include "config.h"
 #include "shared_state.h"
 #include "rate_control.h"
+#include "i2c_bus.h"
 
 static const char* tag = "BMP585";
 
@@ -32,23 +33,6 @@ static const char* tag = "BMP585";
 #define BMP585_I2C_ADDR         0x47     /* 0x46 if the SDO pin is tied to GND */
 #define BMP585_I2C_TIMEOUT_MS   20       /* a stuck bus returns an error, never hangs */
 
-class I2C_manager
-{
-public:
-    i2c_master_bus_handle_t bus_handle = nullptr;
-
-    esp_err_t i2c_bus_setup(gpio_num_t sda_pin, gpio_num_t scl_pin)
-    {
-        i2c_master_bus_config_t bus_config = {};
-        bus_config.i2c_port = I2C_NUM_0;
-        bus_config.sda_io_num = sda_pin;
-        bus_config.scl_io_num = scl_pin;
-        bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
-        bus_config.glitch_ignore_cnt = 7;
-
-        return i2c_new_master_bus(&bus_config, &bus_handle);
-    }
-};
 
 class temp_pressure_Sensor
 {
@@ -144,10 +128,8 @@ public:
 
 static void baro_task(void *arg)
 {
-    I2C_manager bus;
     temp_pressure_Sensor baro;
-    bool ok = (bus.i2c_bus_setup(GPIO_NUM_21, GPIO_NUM_22) == ESP_OK) &&
-              baro.initialise_sensor(bus.bus_handle);
+    bool ok = (i2c_bus_handle() != nullptr) && baro.initialise_sensor(i2c_bus_handle());
     if (!ok) {
         ESP_LOGE(tag, "BMP585 init failed");
     }

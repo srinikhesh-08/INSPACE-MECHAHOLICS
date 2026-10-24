@@ -9,6 +9,7 @@
 #include "rate_control.h"
 #include "fsw_core.h"
 #include "sx1276.h"
+#include "sensors.h"
 
 static const char *TAG = "tlm";
 
@@ -39,7 +40,7 @@ static int build_line(char *buf, size_t n)
         (unsigned long)(now_ms() / 1000u),            /* TIME_S: seconds since power-on */
         (unsigned long)s_packet_count,
         a.alt_agl_m, b.pressure_pa, b.temp_c,
-        0.0,                                           /* VOLTAGE_V: battery reading comes at Stage 8 */
+        (double)power_battery_v(),                     /* VOLTAGE_V, 0.01 V resolution */                                           /* VOLTAGE_V: battery reading comes at Stage 8 */
         (unsigned long)g.utc_hhmmss, g.lat, g.lon, g.alt_msl, (unsigned)g.sats,
         i.ax, i.ay, i.az, i.gz,                        /* gz assumed to be the roll axis */
         fsw_state_name(fsw_get_state()));
@@ -217,6 +218,12 @@ static void telemetry_task(void *arg)
             s_tx_latched_off = true;
             s_tx_enabled = false;
             ESP_LOGW(TAG, "90 minutes since launch: telemetry TX OFF");
+            fsw_save_record();
+        }
+
+        /* in flight, refresh the saved launch age every 30 s so a reset does not restart the 90 minutes */
+        if (s_launch_ms != 0 && !s_tx_latched_off && (now - last_save_ms) >= 30000u) {
+            last_save_ms = now;
             fsw_save_record();
         }
 
