@@ -10,6 +10,7 @@
 #include "persist.h"
 #include "sensors.h"
 #include "data_layer.h"
+#include "spi_bus.h"
 
 static const char *TAG = "fsm";
 
@@ -252,7 +253,7 @@ static void fsm_task(void *arg)
 void fsw_core_start(void)
 {
     persist_init();
-
+    fsw_spi_bus_init();           /* the shared SPI bus, ready before the logger and telemetry tasks start */
     persist_record_t r;
     if (persist_load(&r) &&
         (r.state == ST_ASCENT || r.state == ST_PAYLOAD_SEP || r.state == ST_DESCENT)) {

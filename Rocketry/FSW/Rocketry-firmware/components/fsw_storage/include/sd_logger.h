@@ -1,12 +1,10 @@
 #pragma once
 #include "esp_err.h"
 #include <stdbool.h>
+#include "spi_bus.h"
 
-#define SD_PIN_MOSI   23
-#define SD_PIN_MISO   19
-#define SD_PIN_SCK    18
-#define SD_PIN_CS     5
-#define SD_SPI_HOST   SPI3_HOST
+
+#define SD_PIN_CS     13
 
 #define SD_MOUNT_POINT "/sdcard"
 

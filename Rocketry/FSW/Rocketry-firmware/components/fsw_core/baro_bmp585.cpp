@@ -74,7 +74,7 @@ public:
         i2c_device_config_t device_config = {};
         device_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
         device_config.device_address = BMP585_I2C_ADDR;
-        device_config.scl_speed_hz = 400000;
+        device_config.scl_speed_hz = 100000;
 
         if (i2c_master_bus_add_device(bus_handle, &device_config, &device_handle) != ESP_OK) {
             return false;

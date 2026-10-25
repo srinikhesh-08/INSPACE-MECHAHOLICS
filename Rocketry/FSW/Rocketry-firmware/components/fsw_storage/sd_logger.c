@@ -14,26 +14,16 @@ static FILE *s_file = NULL;
 
 esp_err_t sd_logger_mount(void)
 {
-    spi_bus_config_t bus = {
-        .mosi_io_num     = SD_PIN_MOSI,
-        .miso_io_num     = SD_PIN_MISO,
-        .sclk_io_num     = SD_PIN_SCK,
-        .quadwp_io_num   = -1,
-        .quadhd_io_num   = -1,
-        .max_transfer_sz = 4096,
-    };
-    esp_err_t e = spi_bus_initialize(SD_SPI_HOST, &bus, SDSPI_DEFAULT_DMA);
-    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "SPI bus init failed: %s", esp_err_to_name(e));
-        return e;
-    }
+        /* 1. the shared SPI bus (started once for the SD card and the radio) */
+    esp_err_t e = fsw_spi_bus_init();
+    if (e != ESP_OK) return e;
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SD_SPI_HOST;
-
+    host.slot = FSW_SPI_HOST;
+    host.max_freq_khz = 10000;
     sdspi_device_config_t slot = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot.gpio_cs = SD_PIN_CS;
-    slot.host_id = SD_SPI_HOST;
+    slot.host_id = FSW_SPI_HOST;
 
     /* 3. mount the FAT filesystem at /sdcard */
     esp_vfs_fat_sdmmc_mount_config_t mc = {

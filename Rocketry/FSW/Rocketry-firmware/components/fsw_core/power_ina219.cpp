@@ -66,7 +66,7 @@ static void power_task(void *arg)
         i2c_device_config_t dc = {};
         dc.dev_addr_length = I2C_ADDR_BIT_LEN_7;
         dc.device_address  = INA_ADDR;
-        dc.scl_speed_hz    = 400000;
+        dc.scl_speed_hz    = 100000;
         ok = (i2c_master_bus_add_device(bus, &dc, &s_ina) == ESP_OK) &&
              (ina_write(INA_REG_CONFIG, INA_CONFIG_VALUE) == ESP_OK);
     }

@@ -7,7 +7,7 @@
 #define LORA_PIN_MISO   19
 #define LORA_PIN_MOSI   23
 #define LORA_PIN_CS     5
-#define LORA_PIN_RST    15
+#define LORA_PIN_RST    14
 
 #ifdef __cplusplus
 extern "C" {

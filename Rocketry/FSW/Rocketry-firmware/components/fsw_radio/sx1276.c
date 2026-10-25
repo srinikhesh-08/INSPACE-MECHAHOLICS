@@ -5,8 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
-
-#define LORA_SPI_HOST    SPI3_HOST          /* the SD card uses SPI2_HOST */
+#include "spi_bus.h"
 
 static const char *TAG = "lora";
 static spi_device_handle_t s_dev = NULL;
@@ -80,12 +79,8 @@ static int   s_rssi = 0;
 static float s_snr  = 0.0f;
 esp_err_t lora_init(void)
 {
-    spi_bus_config_t bus = {
-        .mosi_io_num = LORA_PIN_MOSI, .miso_io_num = LORA_PIN_MISO, .sclk_io_num = LORA_PIN_SCK,
-        .quadwp_io_num = -1, .quadhd_io_num = -1, .max_transfer_sz = 300,
-    };
-    esp_err_t e = spi_bus_initialize(LORA_SPI_HOST, &bus, SPI_DMA_CH_AUTO);
-    if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) return e;
+    esp_err_t e = fsw_spi_bus_init();
+    if (e != ESP_OK) return e;
 
     spi_device_interface_config_t dev = {
         .clock_speed_hz = 5 * 1000 * 1000,
@@ -93,7 +88,7 @@ esp_err_t lora_init(void)
         .spics_io_num = LORA_PIN_CS,
         .queue_size = 1,
     };
-    e = spi_bus_add_device(LORA_SPI_HOST, &dev, &s_dev);
+    e = spi_bus_add_device(FSW_SPI_HOST, &dev, &s_dev);
     if (e != ESP_OK) return e;
 
     gpio_reset_pin(LORA_PIN_RST);                 /* hardware reset pulse */
